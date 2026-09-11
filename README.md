@@ -132,8 +132,8 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   the Launcher.
 - **Accent contrast** — white ink on `#7577ba` measures 4.1:1, and `#7577ba` used as *text* on
   `--kai-color-surface` measures 3.8:1; WCAG AA asks 4.5:1 for body text, so those are the two
-  pairs to re-measure on a re-theme (accent-coloured text is the markdown link, the `[image]`
-  marker and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
+  pairs to re-measure on a re-theme (accent-coloured text is the markdown link
+  and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
   and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1. Secondary text is the other known
   shortfall: `--kai-color-text-muted` measures 2.4:1 on `--kai-color-surface` and 2.1:1 on the
   page background the flat dashboard rows sit on.
@@ -183,8 +183,8 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   that fails to load falls back to the caption, `[image]` included.
   - Inline `![alt](solian://files/{id})` images in a body are rendered too — markdown-it drops any
     `src` outside its scheme allowlist, so that one scheme is admitted in `src/content/markdown.js`
-    and nothing else is: an image pointing anywhere else on the internet becomes a muted marker
-    carrying its alt text (`![pixel](…)` renders as "pixel") and is never fetched.
+    and nothing else is: an image pointing anywhere else on the internet renders as nothing in
+    the body (pure content) and is never fetched.
   - The privileged app CSP already starts at `default-src * data: blob:`
     (`security.apps.privileged.CSP.default`), so remote images need no manifest `csp` entry —
     and a `csp` value can only ever be *stricter* than that default.

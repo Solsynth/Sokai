@@ -792,12 +792,8 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   font-style: italic;
 }
 
-/* Rendered links and images have nowhere to go on a feature phone: no href is
-   carried through, and neither may look like a control. */
+/* Rendered links have nowhere to go on a feature phone: no href is carried
+   through, and a link must not look like a control. */
 .kai-md__link {
   color: var(--kai-color-accent);
-}
-
-.kai-md__image {
-  color: var(--kai-color-text-muted);
 }

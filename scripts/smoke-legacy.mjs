@@ -878,14 +878,13 @@ check(
   'an inline file image is rendered, and a foreign one is not fetched',
   (() => {
     const photos = all('.kai-md__photo');
-    const marker = document.querySelector('.kai-md__image');
     const foreign = all('img').filter((image) => (image.getAttribute('src') || '').indexOf('example.com') !== -1);
     return (
       photos.length === 1 &&
       photos[0].getAttribute('src') === 'https://api.solian.app/drive/files/01M28ESTWBSXQSTMVVBYYFDXSK' &&
       photos[0].getAttribute('alt') === 'shot' &&
-      Boolean(marker) &&
-      marker.textContent === 'pixel' &&
+      // A foreign image renders as nothing: the body stays pure content.
+      !document.querySelector('.kai-md__image') &&
       foreign.length === 0
     );
   })(),
