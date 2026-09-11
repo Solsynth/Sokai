@@ -1,0 +1,64 @@
+/**
+ * The Solar Network Sphere API, as far as this app reads it.
+ *
+ * Every call here is anonymous: the public `/sphere/...` routes need no
+ * `Authorization` header, and the server limits anonymous responses to public,
+ * published, non-draft posts anyway. No proxy — on device the privileged
+ * `systemXHR` path bypasses CORS entirely (see `src/kaios/xhr.js`).
+ */
+
+import { request } from '../kaios/xhr.js';
+import { normalizePost, normalizePostList } from './models.js';
+
+export const API_BASE_URL = 'https://api.solian.app';
+
+const DEFAULT_TAKE = 20;
+
+/**
+ * Pagination is `offset` + `take`. The body is a bare array; the row count
+ * lives in the `x-total` response header.
+ */
+function readTotal(headers) {
+  const total = parseInt(headers ? headers['x-total'] : '', 10);
+  return Number.isNaN(total) ? 0 : total;
+}
+
+function accept() {
+  return { headers: { Accept: 'application/json' } };
+}
+
+/**
+ * @param {{ take?: number, offset?: number }} [options]
+ * @returns {Promise<{ posts: Array<object>, total: number }>}
+ */
+export async function listPosts({ take = DEFAULT_TAKE, offset = 0 } = {}) {
+  const url =
+    API_BASE_URL + '/sphere/posts?take=' + take + '&offset=' + offset + '&replies=false&orderDesc=true';
+
+  const response = await request(url, accept());
+  return { posts: normalizePostList(response.data), total: readTotal(response.headers) };
+}
+
+/**
+ * @param {string} id
+ * @returns {Promise<object|null>} `null` when the payload is not a post
+ */
+export async function getPost(id) {
+  const url = API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id);
+
+  const response = await request(url, accept());
+  return normalizePost(response.data);
+}
+
+/**
+ * @param {string} id
+ * @param {{ take?: number, offset?: number }} [options]
+ * @returns {Promise<{ posts: Array<object>, total: number }>}
+ */
+export async function listReplies(id, { take = DEFAULT_TAKE, offset = 0 } = {}) {
+  const url =
+    API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id) + '/replies?take=' + take + '&offset=' + offset;
+
+  const response = await request(url, accept());
+  return { posts: normalizePostList(response.data), total: readTotal(response.headers) };
+}

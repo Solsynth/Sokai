@@ -321,15 +321,155 @@ body {
   font-size: var(--kai-fs-h4);
 }
 
-.kai-result {
+/* --- Post row / post body -------------------------------------------- */
+
+/*
+ * This card is both a feed row (`li`) and the detail screen's post container
+ * (`div`). Only the row takes the selection colour: the detail body holds
+ * rendered markdown, which has its own palette (accent links, muted quotes) and
+ * would be unreadable on the accent background.
+ */
+.kai-post {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   margin-bottom: 0.9rem;
   padding: 0.6rem var(--kai-gutter);
   border-radius: var(--kai-radius);
   background: var(--kai-color-surface);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
 }
 
-.kai-result__url {
-  display: block;
+li.kai-post[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-post__author {
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-post__title {
+  margin: 0 0 0.6rem;
+  font-size: var(--kai-fs-h1);
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-post__meta {
   color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* No `gap` on Gecko 48: the children space themselves. */
+.kai-post__meta span {
+  margin-right: 0.6rem;
+}
+
+li.kai-post[nav-selected="true"] .kai-post__meta {
+  color: var(--kai-color-on-accent);
+}
+
+.kai-post__excerpt {
+  font-size: var(--kai-fs-p-pri);
+  /* `overflow-wrap` is Firefox 49+; this is its alias. */
+  word-wrap: break-word;
+}
+
+.kai-tag {
   font-size: var(--kai-fs-p-thi);
+}
+
+/* --- Rendered markdown ------------------------------------------------ */
+
+.kai-md {
+  margin-bottom: 0.6rem;
+  word-wrap: break-word;
+}
+
+.kai-md p {
+  margin: 0 0 0.9rem;
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-md h1,
+.kai-md h2,
+.kai-md h3 {
+  margin: 1.2rem 0 0.6rem;
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-md h1 {
+  font-size: var(--kai-fs-h1);
+}
+
+.kai-md h2 {
+  font-size: var(--kai-fs-h3);
+}
+
+.kai-md h3 {
+  font-size: var(--kai-fs-h4);
+}
+
+/* The reset leaves `.kai-list` unbulleted; markdown lists are not that list. */
+.kai-md ul,
+.kai-md ol {
+  margin: 0 0 0.9rem;
+  padding-left: 1.8rem;
+  list-style: disc;
+}
+
+.kai-md ol {
+  list-style: decimal;
+}
+
+.kai-md li {
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-md code,
+.kai-md pre {
+  font-family: "Courier New", monospace;
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-md pre {
+  margin: 0 0 0.9rem;
+  padding: 0.6rem;
+  background: var(--kai-color-bg);
+  overflow-x: auto;
+}
+
+.kai-md pre code {
+  font-size: inherit;
+}
+
+.kai-md blockquote {
+  margin: 0 0 0.9rem;
+  padding-left: 0.8rem;
+  border-left: 0.3rem solid var(--kai-color-border);
+  color: var(--kai-color-text-muted);
+}
+
+.kai-md hr {
+  margin: 1.2rem 0;
+  border: 0;
+  border-top: 0.1rem solid var(--kai-color-border);
+}
+
+.kai-md strong {
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-md em {
+  font-style: italic;
+}
+
+/* Rendered links and images have nowhere to go on a feature phone: no href is
+   carried through, and neither may look like a control. */
+.kai-md__link {
+  color: var(--kai-color-accent);
+}
+
+.kai-md__image {
+  color: var(--kai-color-text-muted);
 }

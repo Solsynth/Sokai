@@ -4,6 +4,16 @@ The Solar Network app for KaiOS. The Sekai of Solar Network, S(e)okai.
 
 Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 
+## What it does
+
+The post read path: an Explore screen listing public Solar Network posts from `api.solian.app`, a
+detail screen that renders a post's body as markdown, and the replies underneath it. D-pad and
+softkeys only.
+
+Every read route is anonymous — no `Authorization` header — and the server limits anonymous
+responses to published, non-draft, public posts. Composing, reactions and images are not
+implemented yet; nothing in this increment writes to the API.
+
 ## Quick start
 
 ```bash
@@ -86,10 +96,12 @@ Two gates, because they catch different things.
 `scripts/smoke-legacy.mjs` — runtime. It boots the **shipped bundle** inside a jsdom realm with
 every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`,
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
-key events: D-pad movement and list-loop wrap, `Enter` to open a screen, a search that must go
-out through `systemXHR`, and `Back` at the top level falling through to the platform. 21
-assertions. This is the check that proves the polyfills are actually present rather than
-merely configured.
+key events against canned copies of the Solar Network responses: the post-list request itself
+(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), D-pad movement and
+list-loop wrap, `Enter` to open a post whose body must render as markdown rather than as escaped
+text, the replies that arrive with it, and `Back` at the top level falling through to the
+platform. 36 assertions. This is the check that proves the polyfills are actually present rather
+than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
 JavaScript and app behaviour, not DOM API age. Confirm on a handset before a store release.
@@ -104,11 +116,13 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   with the centre key larger) follow the KaiOS team's own sample app, which is also the source
   of the palette: the public guide documents no colour spec, so `--kai-color-accent` is the one
   knob to re-theme.
-- **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiInput`,
-  `KaiProgress`. Add the rest (Tab, Dialog, Option Menu, …) when a screen needs them; unused
-  components are not scaffolded.
+- **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiProgress`,
+  `KaiPostRow`; `KaiInput` is kept for the compose screen that follows the read path. Add the
+  rest (Tab, Dialog, Option Menu, …) when a screen needs them.
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
-  the first wraps to the last. Selection is tracked in `src/kaios/nav.js` by uid so Vue stays
+  the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
+  keys until the view has been scrolled to its end — the post body, which is otherwise taller
+  than the screen and unreachable. Selection is tracked in `src/kaios/nav.js` by uid so Vue stays
   authoritative over the DOM; `[nav-selectable]` / `[nav-selected="true"]` attributes are kept
   for CSS and tooling compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the
@@ -124,12 +138,14 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 `manifest.webapp` requests `systemXHR`, which is what lets a privileged app reach servers that
 send no CORS headers. That privilege only applies to `XMLHttpRequest` created with
 `mozSystem: true`; `fetch()` has no equivalent. Every remote call therefore goes through
-`requestJSON()` in `src/kaios/xhr.js`.
+`request()` in `src/kaios/xhr.js`, which hands back the status, the response headers (the post
+list reports its row count in `x-total`) and the parsed body, and takes a method and a JSON body
+for the write paths that come later.
 
-The demo Search screen is wired to a CORS-enabled public API so it also works in the desktop dev
-server. It is an integration point, not a feature: point `SEARCH_ENDPOINT` in
-`src/views/SearchView.vue` at the Solar Network API, and the privileged path keeps working where
-a browser would refuse.
+`src/api/solian.js` is the only module that knows an API URL. Every route it calls is anonymous:
+public Sphere reads need no `Authorization` header, and the server limits anonymous responses to
+published, non-draft, public posts. The edge happens to send CORS headers as well, so the same
+code works in the desktop dev server — but the privileged path is what matters on a handset.
 
 ## Layout
 
@@ -137,10 +153,12 @@ a browser would refuse.
 index.html                 Vite entry (source only — not a runnable page)
 src/
   main.js                  entry: key handler, l10n, mount
-  App.vue                  screen stack + softkey bar
+  App.vue                  the view map + softkey bar
+  api/                     Solar Network client, wire → model normalisers
+  content/markdown.js      post bodies: markdown in the detail, plain text in a row
   kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR
   components/              KaiOS UI components
-  views/                   Home, Search, About
+  views/                   Explore, Post, About
   styles/kaios.css         design tokens + primitives
 public/                    copied verbatim into dist/: manifest.webapp, l10n data,
                            l10n.js, manifest icons
@@ -155,9 +173,12 @@ dist/                      the only installable app package (build output)
   path has supported IIFE for years.
 - **No source maps.** Three transpilers deep a map would be a chain of approximations, and the
   package has to exclude it anyway.
-- **Bundle size** is ~200kB (~76kB gzip), mostly core-js: its compat data is deliberately
-  conservative and polyfills spec-conformance details for engines as new as Firefox 69. If that
-  ever matters more than conformance, prune with the polyfill plugin's `shouldInjectPolyfill`.
+- **Bundle size** is ~324kB (~128kB gzip). Roughly half of it is core-js: its compat data is
+  deliberately conservative and polyfills spec-conformance details for engines as new as Firefox
+  69. The rest is Vue plus `markdown-it`, which renders post bodies — a hand-written renderer
+  would be smaller, but escaping user content is exactly the bug class worth paying a library
+  for. If the core-js share ever matters more than conformance, prune it with the polyfill
+  plugin's `shouldInjectPolyfill`.
 - **No vue-router.** KaiOS has no address bar and the Back key is the only history; the screen
   stack in `src/kaios/views.js` is ~20 lines.
 - **`type: "privileged"`** is required for `systemXHR`, and privileged packages must be signed

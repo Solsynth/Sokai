@@ -24,7 +24,9 @@ export const nav = reactive({
 let nextUid = 0;
 let refreshScheduled = false;
 
-/** @type {Array<{ uid: number, el: object, onEnter: Function|null }>} */
+/**
+ * @type {Array<{ uid: number, el: object, onEnter: Function|null, scrollFirst: boolean }>}
+ */
 const registry = [];
 
 const DOCUMENT_POSITION_PRECEDING = 0x02;
@@ -101,11 +103,13 @@ function refresh() {
 }
 
 /**
- * @param {{ el: object, onEnter?: Function|null }} entry `el` is a template ref
+ * @param {{ el: object, onEnter?: Function|null, scrollFirst?: boolean }} entry
+ *   `el` is a template ref. `scrollFirst` gives a tall element — a post body —
+ *   the arrow keys until it has been scrolled to its end.
  * @returns {number} uid to pass back to `unregisterSelectable`
  */
-export function registerSelectable({ el, onEnter = null }) {
-  const entry = { uid: ++nextUid, el, onEnter };
+export function registerSelectable({ el, onEnter = null, scrollFirst = false }) {
+  const entry = { uid: ++nextUid, el, onEnter, scrollFirst };
   registry.push(entry);
   scheduleRefresh();
   return entry.uid;
@@ -134,9 +138,31 @@ function scrollContent(delta) {
 }
 
 /**
+ * One step of scrolling, clamped to the region's extent.
+ * @param {number} delta
+ * @returns {boolean} whether the region moved — this is what decides if a
+ *   `scrollFirst` element consumed the press
+ */
+function scrollClamped(delta) {
+  const scroller = document.querySelector('.kai-content');
+  if (!scroller) return false;
+
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const next = Math.min(max, Math.max(0, scroller.scrollTop + delta * SCROLL_STEP_PX));
+  if (next === scroller.scrollTop) return false;
+
+  scroller.scrollTop = next;
+  return true;
+}
+
+/**
  * Moves the highlight by `delta`, wrapping at the ends of the list
  * (design-guide: list views loop). With fewer than two selectable elements there
  * is nothing to move between, so the press scrolls the view instead.
+ *
+ * An element registered with `scrollFirst` gets the arrow keys until the view
+ * has been scrolled to its end: a post body taller than the screen is otherwise
+ * unreachable, because the highlight would leave it on the first DOWN press.
  */
 export function move(delta) {
   const list = ordered();
@@ -145,6 +171,9 @@ export function move(delta) {
     scrollContent(delta);
     return;
   }
+
+  const current = registry.find((entry) => entry.uid === nav.current);
+  if (current && current.scrollFirst && scrollClamped(delta)) return;
 
   let index = list.findIndex((entry) => entry.uid === nav.current);
   index = index === -1 ? 0 : (index + delta + list.length) % list.length;

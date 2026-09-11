@@ -8,7 +8,7 @@
  * bundle *parses*, but not that the app *runs*. The polyfills that make Gecko 48
  * work are injected at build time by usage detection, so the only honest check is
  * to take those APIs away and see whether the app still starts, navigates and
- * completes a privileged request.
+ * reads posts over a privileged request.
  *
  * What this gate cannot do: jsdom fetches external scripts asynchronously, so a
  * script that a browser would run *during* parsing effectively runs after it
@@ -38,6 +38,92 @@ function check(label, condition, observed) {
 }
 
 const navState = (nodes) => nodes.map((node) => node.getAttribute('nav-selected'));
+
+/* --- Canned API responses ------------------------------------------------ */
+
+const HOUR_MS = 3600000;
+
+const FEED_POST_ID = '01a09055-3a56-7bc1-b59b-c84e56100be9';
+const SECOND_POST_ID = '01a09028-3836-7c15-8a22-93b7b7db11e0';
+const REPLY_ID = '01a08ff3-1852-7114-883c-3f05ac1bcb96';
+
+/** The wire shape observed from `https://api.solian.app`: snake_case, integer enums. */
+function wirePost(overrides) {
+  const hourAgo = new Date(Date.now() - HOUR_MS).toISOString();
+
+  return Object.assign(
+    {
+      id: FEED_POST_ID,
+      title: null,
+      description: null,
+      slug: null,
+      edited_at: null,
+      drafted_at: null,
+      published_at: hourAgo,
+      visibility: 0,
+      content: '',
+      content_type: 0,
+      type: 0,
+      is_truncated: false,
+      replies_count: 0,
+      thread_replies_count: 0,
+      boost_count: 0,
+      reactions_count: {},
+      upvotes: 0,
+      downvotes: 0,
+      views_total: 0,
+      replied_post_id: null,
+      replied_post: null,
+      forwarded_post_id: null,
+      forwarded_post: null,
+      attachments: [],
+      tags: [],
+      publisher: { id: '5e446e1d-29fa-4aea-9c6d-c20306b83433', type: 0, name: 'iCat', nick: 'iCat' },
+      resource_identifier: 'post:' + FEED_POST_ID,
+      meta: { embeds: [] },
+      created_at: hourAgo,
+    },
+    overrides,
+  );
+}
+
+const FEED = [
+  wirePost({
+    content: '# SN notes\n\n- supports X\n- and Y\n\nSee [the docs](https://example.com/docs) for more.',
+  }),
+  wirePost({
+    id: SECOND_POST_ID,
+    content: '第二篇内容',
+    // Drafts can have a null `published_at`; the row has to fall back to
+    // `created_at` instead of rendering nothing (or throwing).
+    published_at: null,
+    publisher: { id: 'b', type: 0, name: 'solsynth', nick: 'Solsynth' },
+    replied_post_id: REPLY_ID,
+    replied_post: { id: REPLY_ID, publisher: { id: 'c', type: 0, name: 'QRBG3376', nick: 'QRBG3376' } },
+  }),
+];
+
+const DETAIL = wirePost({
+  content: '# Heading\n\n- a\n- b',
+  visibility: 2,
+  replies_count: 1,
+  edited_at: new Date(Date.now() - HOUR_MS / 2).toISOString(),
+  tags: [{ name: 'sokai' }, { name: null }],
+});
+
+const REPLIES = [
+  wirePost({
+    id: REPLY_ID,
+    content: 'reply body',
+    publisher: { id: 'c', type: 0, name: 'QRBG3376', nick: 'QRBG3376' },
+  }),
+];
+
+const CANNED = {
+  list: { status: 200, headers: 'x-total: 2\r\n', body: FEED },
+  detail: { status: 200, headers: '', body: DETAIL },
+  replies: { status: 200, headers: 'x-total: 1\r\n', body: REPLIES },
+};
 
 /** Runs before any other script in the page (see the stub note above). */
 const PREAMBLE = `<script>
@@ -69,34 +155,64 @@ const PREAMBLE = `<script>
   delete window.IntersectionObserver;
   delete window.globalThis;
 
-  /* Deterministic stand-in for public/js/libs/l10n.js: get() echoes the id, so
-     assertions also prove strings flow through the l10n layer. once() is
+  /* Deterministic stand-in for public/js/libs/l10n.js: get() echoes the id —
+     and the placeholder names it was handed — so assertions also prove strings
+     flow through the l10n layer with the right argument names. once() is
      synchronous, which turns the real page's mount race into a hard failure. */
   window.navigator.mozL10n = {
-    get: function (id) { return id; },
+    get: function (id, args) {
+      if (!args) return id;
+      return id + '(' + Object.keys(args).sort().join(',') + ')';
+    },
     once: function (callback) { callback(); }
   };
 
-  /* Stands in for XMLHttpRequest so the privileged path can be inspected. */
+  /* Stands in for XMLHttpRequest so the privileged path can be inspected, and
+     answers from a canned route table so the read path can be driven end to
+     end. Responses land in a later turn of the event loop, like the real ones. */
+  var CANNED = ${JSON.stringify(CANNED)};
+
   window.__requests = [];
   window.XMLHttpRequest = function (options) {
     this.options = options;
     this.responseType = '';
     this.timeout = 0;
     this.status = 0;
+    this.requestHeaders = {};
+    this.responseHeaders = '';
   };
   window.XMLHttpRequest.prototype.open = function (method, url) {
     this.method = method;
     this.url = url;
   };
+  window.XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    this.requestHeaders[name] = value;
+  };
+  window.XMLHttpRequest.prototype.getAllResponseHeaders = function () {
+    return this.responseHeaders;
+  };
   window.XMLHttpRequest.prototype.send = function () {
     window.__requests.push(this);
+    var xhr = this;
+    setTimeout(function () { respond(xhr); }, 0);
   };
-  window.XMLHttpRequest.prototype.respond = function (status, body) {
+  window.XMLHttpRequest.prototype.respond = function (status, body, headers) {
     this.status = status;
     this.response = body;
+    this.responseHeaders = headers || '';
     this.onload();
   };
+
+  function respond(xhr) {
+    var url = xhr.url;
+    var canned = url.indexOf('/replies') !== -1
+      ? CANNED.replies
+      : url.indexOf('?') !== -1
+        ? CANNED.list
+        : CANNED.detail;
+
+    xhr.respond(canned.status, canned.body, canned.headers);
+  }
 })();
 </script>`;
 
@@ -139,6 +255,23 @@ const text = (selector) => {
   const node = document.querySelector(selector);
   return node ? node.textContent.trim() : '';
 };
+const texts = (selector) => all(selector).map((node) => node.textContent.trim());
+
+/**
+ * Turns the event loop until `predicate` holds.
+ *
+ * A load is several asynchronous hops deep — the canned response arrives in a
+ * later turn, then the store updates, then Vue's scheduler renders in a
+ * microtask — so a fixed number of turns would encode that chain here and break
+ * the moment the app grows a hop.
+ */
+async function until(predicate) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (predicate()) return true;
+    await flush();
+  }
+  return false;
+}
 
 /**
  * Dispatches a hardware key and waits for Vue to patch the DOM. Vue batches
@@ -152,15 +285,52 @@ async function press(key) {
   return event;
 }
 
-/* --- Boot ---------------------------------------------------------------- */
+/* --- Explore -------------------------------------------------------------- */
 
-const items = all('.kai-list-item');
-check('app mounts', all('#app').length === 1 && items.length === 2, `list items: ${items.length}`);
-check('header renders a localised title', text('.kai-header__title') === 'app_title', text('.kai-header__title'));
+await until(() => document.querySelectorAll('li.kai-post').length > 0);
+
+const rows = all('li.kai-post');
+check('app mounts', all('#app').length === 1 && rows.length === 2, `explore rows: ${rows.length}`);
+check('header renders a localised title', text('.kai-header__title') === 'nav_explore', text('.kai-header__title'));
+check('first row starts selected', rows[0] && rows[0].getAttribute('nav-selected') === 'true', navState(rows));
+
+const listRequest = requests[0];
+check('the post list is fetched on mount', Boolean(listRequest));
+if (listRequest) {
+  check('request uses the systemXHR privilege', listRequest.options && listRequest.options.mozSystem === true);
+  check('request is an anonymous GET', listRequest.method === 'GET' && !('Authorization' in listRequest.requestHeaders), {
+    method: listRequest.method,
+    headers: Object.keys(listRequest.requestHeaders),
+  });
+  check('request asks for JSON', listRequest.requestHeaders.Accept === 'application/json', listRequest.requestHeaders);
+  check(
+    'request URL is the offset-paginated public post list',
+    listRequest.url === 'https://api.solian.app/sphere/posts?take=20&offset=0&replies=false&orderDesc=true',
+    listRequest.url,
+  );
+}
+check('one request is made for the post list', requests.length === 1, requests.length);
+
+check('rows show the author display name', texts('.kai-post__author').join('|') === 'iCat|Solsynth', texts('.kai-post__author'));
 check(
-  'first item starts selected',
-  items[0] && items[0].getAttribute('nav-selected') === 'true',
-  navState(items),
+  'rows show a relative timestamp through the l10n layer',
+  text('.kai-post__time') === 'post_hours_ago(h)',
+  text('.kai-post__time'),
+);
+check(
+  'a reply row names the post it answered',
+  texts('.kai-post__meta')[1].indexOf('post_replied_to(name)') !== -1,
+  texts('.kai-post__meta'),
+);
+check(
+  'a null publication date falls back to the creation time',
+  texts('.kai-post__time')[1] === 'post_hours_ago(h)',
+  texts('.kai-post__time'),
+);
+check(
+  'rows carry text, not markup',
+  all('.kai-md').length === 0 && text('.kai-post__excerpt') === 'SN notes - supports X - and Y See the docs for more.',
+  { markdownBlocks: all('.kai-md').length, excerpt: text('.kai-post__excerpt') },
 );
 
 /* --- D-pad -------------------------------------------------------------- */
@@ -168,93 +338,110 @@ check(
 await press('ArrowDown');
 check(
   'DOWN moves the highlight',
-  items[0].getAttribute('nav-selected') === 'false' && items[1].getAttribute('nav-selected') === 'true',
-  navState(items),
+  rows[0].getAttribute('nav-selected') === 'false' && rows[1].getAttribute('nav-selected') === 'true',
+  navState(rows),
 );
 
 await press('ArrowDown');
 check(
   'DOWN at the end wraps to the top (design-guide list loop)',
-  items[0].getAttribute('nav-selected') === 'true',
-  navState(items),
+  rows[0].getAttribute('nav-selected') === 'true',
+  navState(rows),
 );
 
 await press('ArrowUp');
-check('UP at the top wraps to the end', items[1].getAttribute('nav-selected') === 'true', navState(items));
+check('UP at the top wraps to the end', rows[1].getAttribute('nav-selected') === 'true', navState(rows));
 
-check(
-  'softkey shows the centre action',
-  text('.kai-softkey__key--center') === 'action_select',
-  text('.kai-softkey__key--center'),
-);
+check('softkey shows the centre action', text('.kai-softkey__key--center') === 'action_open', text('.kai-softkey__key--center'));
+check('softkey offers About', text('.kai-softkey__key--right') === 'action_about', text('.kai-softkey__key--right'));
 
-/* --- Navigate ----------------------------------------------------------- */
+/* --- Post detail -------------------------------------------------------- */
 
-// Back onto the first item, which is the screen this exercises.
 await press('ArrowUp');
 await press('Enter');
+await until(() => document.querySelector('.kai-md h1'));
 
-check(
-  'ENTER opens the selected screen',
-  text('.kai-header__title') === 'nav_search',
-  text('.kai-header__title'),
-);
+check('ENTER opens the selected post', text('.kai-header__title') === 'post_title', text('.kai-header__title'));
 check(
   'back softkey appears on a sub-screen',
   text('.kai-softkey__key--left') === 'action_back',
   text('.kai-softkey__key--left'),
 );
 
-/* --- Privileged request ------------------------------------------------- */
-
-const input = document.querySelector('.kai-field__input');
-check('text field is focusable and selected', Boolean(input) && document.activeElement === input, {
-  present: Boolean(input),
-  focused: document.activeElement && document.activeElement.tagName,
-});
-
-input.value = 'array';
-input.dispatchEvent(new window.Event('input', { bubbles: true }));
-await flush();
-
-await press('Enter');
-
-const request = requests[0];
-check('ENTER sends a request', Boolean(request));
-if (request) {
-  check('request uses the systemXHR privilege', request.options && request.options.mozSystem === true);
-  check('request is a GET', request.method === 'GET');
-  check('request URL carries the search term', request.url.includes('q=array'), request.url);
-}
-
-if (request) {
-  request.respond(200, {
-    items: [
-      {
-        full_name: 'solsynth/sokai',
-        html_url: 'https://github.com/solsynth/sokai',
-      },
-    ],
-  });
-  await flush();
-}
-
-check('results render', all('.kai-result').length === 1, `results: ${all('.kai-result').length}`);
+const detailRequests = requests.slice(1);
 check(
-  'result shows the remote title',
-  text('.kai-result').startsWith('solsynth/sokai'),
-  text('.kai-result'),
+  'the post and its replies are requested together',
+  detailRequests.length === 2 &&
+    detailRequests[0].url === 'https://api.solian.app/sphere/posts/' + FEED_POST_ID &&
+    detailRequests[1].url === 'https://api.solian.app/sphere/posts/' + FEED_POST_ID + '/replies?take=20&offset=0',
+  detailRequests.map((request) => request.url),
 );
+
+const heading = document.querySelector('.kai-md h1');
+check(
+  'the body is rendered as markdown',
+  Boolean(heading) && heading.textContent === 'Heading',
+  document.querySelector('.kai-md') ? document.querySelector('.kai-md').textContent : null,
+);
+check('markdown list syntax is not leaked as text', all('.kai-md li').length === 2 && texts('.kai-md li').join('|') === 'a|b', texts('.kai-md li'));
+check(
+  'no raw markdown markers survive into the DOM',
+  text('.kai-md').indexOf('#') === -1,
+  text('.kai-md'),
+);
+
+const bodyCard = document.querySelector('.kai-content > div.kai-post');
+check(
+  'focus starts in the post body',
+  Boolean(bodyCard) && bodyCard.getAttribute('nav-selected') === 'true',
+  bodyCard && bodyCard.getAttribute('nav-selected'),
+);
+check(
+  'the body carries author, timestamp, visibility, counts and tags',
+  text('.kai-content > div.kai-post').indexOf('iCat') !== -1 &&
+    text('.kai-post__time') === 'post_hours_ago(h)' &&
+    all('.kai-tag').length === 1 &&
+    all('.kai-tag')[0].textContent.trim() === 'sokai',
+  { tags: texts('.kai-tag'), time: text('.kai-post__time') },
+);
+check(
+  'a non-public post is labelled and the edited marker shows',
+  ['post_visibility_unlisted', 'post_edited', 'post_count_replies(n)'].every(
+    (label) => text('.kai-content > div.kai-post').indexOf(label) !== -1,
+  ),
+  text('.kai-content > div.kai-post').slice(0, 200),
+);
+
+const replyRows = all('li.kai-post');
+check(
+  'replies render under their own separator',
+  text('.kai-separator') === 'post_replies' &&
+    replyRows.length === 1 &&
+    replyRows[0].textContent.indexOf('reply body') !== -1,
+  { separator: text('.kai-separator'), replies: replyRows.length },
+);
+
+// The body has nothing to scroll in jsdom (scrollHeight is 0), so the press
+// moves on — the `scrollFirst` behaviour needs a real layout box.
+await press('ArrowDown');
+check('DOWN leaves the body for the first reply', replyRows[0].getAttribute('nav-selected') === 'true', navState(replyRows));
+
+await press('ArrowUp');
+check('UP returns to the body', bodyCard.getAttribute('nav-selected') === 'true', bodyCard.getAttribute('nav-selected'));
 
 /* --- Back, then the other screen ---------------------------------------- */
 
 await press('SoftLeft');
-check('left softkey goes back', text('.kai-header__title') === 'app_title', text('.kai-header__title'));
+await until(() => all('li.kai-post').length === 2);
+check(
+  'left softkey goes back to Explore',
+  text('.kai-header__title') === 'nav_explore' && all('li.kai-post').length === 2,
+  { title: text('.kai-header__title'), rows: all('li.kai-post').length },
+);
 
-await press('ArrowDown');
-await press('Enter');
+await press('SoftRight');
 const about = text('.kai-content');
-check('second screen opens', text('.kai-header__title') === 'nav_about', text('.kai-header__title'));
+check('About opens from Explore', text('.kai-header__title') === 'nav_about', text('.kai-header__title'));
 // Guards the build-time `define` values: unreplaced, these render as nothing
 // and the screen is silently blank.
 check('About shows the compiled version', about.includes('0.2.0'), about);

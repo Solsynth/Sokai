@@ -25,6 +25,11 @@ import { t } from '../kaios/l10n.js';
 import { setBaseSoftkeys } from '../kaios/nav.js';
 import { canGoBack, pop } from '../kaios/views.js';
 
+// Every screen is mounted with its stack entry's parameters; About takes none.
+defineProps({
+  params: { type: Object, default: () => ({}) },
+});
+
 // Replaced at build time by Vite `define` (see vite.config.js).
 const version = __APP_VERSION__;
 const target = __KAIOS_TARGET__;
