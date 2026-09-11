@@ -105,14 +105,14 @@ every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`
 key events against canned copies of the Solar Network responses: the dashboard's entries, clock,
 countdown and the bare circular spinner it shows while a page flips, the post-list request
 (privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), the searchbar above the
-one-row pager (previous, count, next) with the highlight starting on the first post, D-pad
-movement and list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to
-open a post
+one-row pager of always-present icon cells (previous, count, next; the inert boundary cell is
+dimmed) with the highlight starting on the first post, D-pad movement and list-loop wrap, the
+row's quote, picture, attachment and count lines, `Enter` to open a post
 whose body must render as markdown rather than as escaped text (with its quoted parent rendered
 as markdown too, its attachments above the card, and only Solar Network file images fetched), the
 replies that arrive with it, the status-bar inset rule, the searchbar pushing the Search screen
 whose field starts highlighted and whose committed query hits the posts search endpoint, and
-`Back` at the top level falling through to the platform. 78 assertions. This is the check that
+`Back` at the top level falling through to the platform. 79 assertions. This is the check that
 proves the polyfills are actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
@@ -201,9 +201,11 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
   than the screen and unreachable. The feed's page-flip controls sit above the posts in one
-  edge-to-edge row — previous, the total page count, next — under a searchbar that pushes the
-  Search screen; both are reachable with `Up` from the first post or by wrapping past the last.
-  Primary content registers as `initial`, so the highlight starts on the first post (or the
+  edge-to-edge row — an icon cell for previous, the total page count, an icon cell for next,
+  both always present (the inert one at a boundary is dimmed, not a focus target, and the
+  icon-only cells carry their localised labels as `aria-label`) — under a searchbar that pushes
+  the Search screen; both are reachable with `Up` from the first post or by wrapping past the
+  last. Primary content registers as `initial`, so the highlight starts on the first post (or the
   search field on the Search screen) rather than on the controls. Selection is tracked in
   `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling

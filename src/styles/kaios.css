@@ -411,14 +411,15 @@ body {
 }
 
 .kai-pager__nav .kai-list-item {
-  flex: 1;
+  flex: 0 0 auto;
+  width: 4.8rem;
   margin: 0;
-  padding: 0 0.4rem;
+  padding: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   background: transparent;
-  text-align: center;
+  font-size: 2rem;
 }
 
 .kai-pager__nav .kai-list-item[nav-selected="true"] {
@@ -426,7 +427,19 @@ body {
   color: var(--kai-color-on-accent);
 }
 
+/* The inert boundary cell: the same box, dimmed, and never a focus target. */
+.kai-pager__cell--dim {
+  flex: 0 0 auto;
+  width: 4.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kai-color-text-muted);
+  font-size: 2rem;
+}
+
 .kai-pager__status {
+  flex: 1;
   margin: 0;
   padding: 0 0.6rem;
   border: 0;

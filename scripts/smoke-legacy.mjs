@@ -622,10 +622,31 @@ check(
 /* --- Page flip ---------------------------------------------------------- */
 
 check(
-  'the first page offers a next page, and names the page it is',
-  texts('.kai-pager .kai-list-item__primary').join('|') === 'action_next_page' &&
+  'the first page offers a next icon and names the page',
+  texts('.kai-pager .kai-list-item__primary').join('|') === '›' &&
     tight(text('.kai-pager__status')) === 'post_page(page,pages)',
   { pager: texts('.kai-pager .kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
+);
+check(
+  'both page cells are always present; the inert one is dim',
+  (() => {
+    const cells = document.querySelectorAll('.kai-pager__cell');
+    const dim = document.querySelector('.kai-pager__cell--dim');
+    const active = document.querySelectorAll('.kai-pager .kai-list-item');
+    return (
+      cells.length === 2 &&
+      Boolean(dim) &&
+      dim.getAttribute('aria-hidden') === 'true' &&
+      dim.getAttribute('nav-selectable') === null &&
+      active.length === 1 &&
+      active[0].textContent.trim() === '›'
+    );
+  })(),
+  Array.prototype.map.call(document.querySelectorAll('.kai-pager__cell'), (node) => ({
+    text: node.textContent.trim(),
+    cls: node.className,
+    selectable: node.getAttribute('nav-selectable'),
+  })),
 );
 check(
   'the searchbar sits above the page controls',
@@ -640,19 +661,20 @@ check(
   },
 );
 check(
-  'the pager is one row: the count and the next cell',
+  'the pager is one row: dim prev, count, next',
   (() => {
     const pager = document.querySelector('.kai-pager');
     const nav = document.querySelector('.kai-pager__nav');
     const status = document.querySelector('.kai-pager__status');
-    const next = document.querySelector('.kai-pager__cell');
-    if (!pager || !nav || !status || !next) return false;
+    const cells = document.querySelectorAll('.kai-pager__cell');
+    if (!pager || !nav || !status || cells.length !== 2) return false;
     const statusStyle = window.getComputedStyle(status);
     const navStyle = window.getComputedStyle(nav);
     return (
-      status.parentElement === nav &&
       nav.parentElement === pager &&
-      status.nextElementSibling === next &&
+      status.parentElement === nav &&
+      status.previousElementSibling === cells[0] &&
+      status.nextElementSibling === cells[1] &&
       navStyle.display === 'flex' &&
       statusStyle.borderTopWidth === '0px' &&
       statusStyle.textAlign === 'center'
@@ -700,18 +722,20 @@ check(
 );
 check(
   'the second page offers both directions',
-  texts('.kai-pager .kai-list-item__primary').join('|') === 'action_prev_page|action_next_page',
+  texts('.kai-pager .kai-list-item__primary').join('|') === '‹|›',
   texts('.kai-pager .kai-list-item__primary'),
 );
 check(
-  'previous, count and next share one row',
+  'previous, count and next share one row, labelled for screen readers',
   (() => {
     const cells = document.querySelectorAll('.kai-pager__cell');
     const status = document.querySelector('.kai-pager__status');
     if (cells.length !== 2 || !status) return false;
     return (
-      cells[0].textContent.trim() === 'action_prev_page' &&
-      cells[1].textContent.trim() === 'action_next_page' &&
+      cells[0].textContent.trim() === '‹' &&
+      cells[1].textContent.trim() === '›' &&
+      cells[0].getAttribute('aria-label') === 'action_prev_page' &&
+      cells[1].getAttribute('aria-label') === 'action_next_page' &&
       status.previousElementSibling === cells[0] &&
       status.nextElementSibling === cells[1] &&
       window.getComputedStyle(cells[0]).borderTopWidth === '0px' &&
@@ -720,7 +744,10 @@ check(
   })(),
   Array.prototype.map.call(
     document.querySelectorAll('.kai-pager__cell'),
-    (node) => node.textContent.trim(),
+    (node) => ({
+      text: node.textContent.trim(),
+      aria: node.getAttribute('aria-label'),
+    }),
   ),
 );
 check(
