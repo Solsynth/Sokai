@@ -130,6 +130,30 @@ const isBodySelected = computed(() => uid.value !== 0 && nav.current === uid.val
 
 const rendered = computed(() => (post.value ? bodyHtml(post.value) : ''));
 
+/**
+ * A body image that cannot be fetched must not leave a broken frame where the
+ * picture should be: it is swapped for the same `[image]` marker an off-device
+ * image gets. `v-html` hands Vue no hook for the nodes it inserted, so the
+ * listener goes on the element itself.
+ */
+function guardPhotos(root) {
+  if (!root) return;
+
+  const images = root.querySelectorAll('img.kai-md__photo');
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index];
+    image.addEventListener('error', () => {
+      const marker = document.createElement('span');
+      marker.className = 'kai-md__image';
+      marker.textContent = '[image]';
+      if (image.parentNode) image.parentNode.replaceChild(marker, image);
+    });
+  }
+}
+
+// `flush: 'post'` so the nodes exist by the time they are guarded.
+watch(rendered, () => guardPhotos(body.value), { flush: 'post' });
+
 const handle = computed(() =>
   post.value && post.value.author.name && post.value.author.name !== post.value.author.display
     ? post.value.author.name

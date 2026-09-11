@@ -450,6 +450,37 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
   color: var(--kai-color-accent);
 }
 
+/*
+ * Pictures. `width`/`height` come from the wire, so the box is the right shape
+ * before any bytes arrive — which is also the only lazy-loading available:
+ * Gecko 48 has no `loading="lazy"`.
+ *
+ * A row crops its one picture (`object-fit` is Firefox 32+, the file is served
+ * as a compressed WebP) so the row stays a row; the detail screen shows images
+ * whole, because that is why the post was opened.
+ */
+.kai-attachment__image,
+.kai-md__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-border);
+}
+
+.kai-attachment__image {
+  margin-top: 0.4rem;
+}
+
+li.kai-post .kai-attachment__image {
+  max-height: 12rem;
+  object-fit: cover;
+}
+
+.kai-md__photo {
+  margin: 0 0 0.9rem;
+}
+
 .kai-post__counts {
   margin-top: 0.2rem;
   color: var(--kai-color-text-muted);

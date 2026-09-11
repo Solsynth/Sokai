@@ -15,6 +15,20 @@ export const API_BASE_URL = 'https://api.solian.app';
 const DEFAULT_TAKE = 20;
 
 /**
+ * A published file, as an `<img>` can load it. The endpoint answers `307` to a
+ * signed object-storage URL — for images a compressed WebP, observed between
+ * 24kB and 350kB — so no CORS or `systemXHR` involvement is needed: plain image
+ * loading is cross-origin by design, and the KaiOS privileged CSP starts at
+ * `default-src * data: blob:`.
+ *
+ * @param {string} id attachment id from the wire
+ * @returns {string}
+ */
+export function fileUrl(id) {
+  return API_BASE_URL + '/drive/files/' + encodeURIComponent(id);
+}
+
+/**
  * Pagination is `offset` + `take`. The body is a bare array; the row count
  * lives in the `x-total` response header.
  */

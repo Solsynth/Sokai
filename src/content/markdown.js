@@ -13,12 +13,20 @@
 
 import MarkdownIt from 'markdown-it';
 
+import { fileUrl } from '../api/solian.js';
+
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
 /** 1 in the API's `content_type` enum. */
 const CONTENT_TYPE_HTML = 1;
 
-const IMG_TAG = /<\/?img\b[^>]*>/g;
+/* Images that point at a Solar Network file (`![alt](solian://files/<id>)` — the
+   form the clients insert inline) are the one kind this app can actually show.
+   Everything else in an image slot is replaced by a marker below. */
+const BODY_FILE_PREFIX = 'solian://files/';
+const BODY_FILE_ID = /^[A-Za-z0-9_-]+$/;
+
+const IMG_TAG = /<img\b(?![^>]*class="kai-md__photo")[^>]*>/g;
 const ANCHOR_OPEN = /<a\b[^>]*>/g;
 const ANCHOR_CLOSE = /<\/a>/g;
 
@@ -29,6 +37,41 @@ const MARKDOWN_RULE = /^\s*[-*_]{3,}\s*$/gm;
 const HTML_TAG = /<[^>]*>/g;
 const WHITESPACE = /\s+/g;
 const TRAILING_WHITESPACE = /\s+$/;
+
+/**
+ * @param {string} src
+ * @returns {string} the file id, or `''` when the source is not a Solar file
+ */
+function bodyFileId(src) {
+  if (src.slice(0, BODY_FILE_PREFIX.length) !== BODY_FILE_PREFIX) return '';
+
+  const id = src.slice(BODY_FILE_PREFIX.length).replace(/[?#].*$/, '');
+  return BODY_FILE_ID.test(id) ? id : '';
+}
+
+// markdown-it has already dropped the `src` of anything outside its scheme
+// allowlist by the time a renderer rule runs, so `solian://` has to be admitted
+// here — and only that scheme; every other image is meant to be discarded.
+const defaultValidateLink = md.validateLink;
+md.validateLink = (url) =>
+  url.slice(0, BODY_FILE_PREFIX.length) === BODY_FILE_PREFIX ? true : defaultValidateLink(url);
+
+const defaultImage = md.renderer.rules.image;
+
+/**
+ * Renders an inline file image as a real `<img>`, and leaves every other image
+ * to `neutralize`: a body can point at any host on the internet, and a feature
+ * phone has no way to show, open or leave one.
+ */
+md.renderer.rules.image = (tokens, index, options, env, self) => {
+  const token = tokens[index];
+  const id = bodyFileId(token.attrGet('src') || '');
+  if (!id) return defaultImage(tokens, index, options, env, self);
+
+  const src = md.utils.escapeHtml(fileUrl(id));
+  const alt = md.utils.escapeHtml(token.content || '');
+  return '<img class="kai-md__photo" src="' + src + '" alt="' + alt + '">';
+};
 
 /** Three lines at the 1.7rem body size on a 240px screen. */
 const DEFAULT_EXCERPT_UNITS = 70;
@@ -86,7 +129,9 @@ function plainText(post) {
  * can only match markup the renderer itself emitted.
  *
  * Images and links both point off-device, and a feature phone has nowhere to
- * send them, so neither may look or behave like a control.
+ * send them, so neither may look or behave like a control — except an inline
+ * file image, which `renderImage` already turned into a `kai-md__photo` and this
+ * leaves alone.
  */
 function neutralize(html) {
   return html

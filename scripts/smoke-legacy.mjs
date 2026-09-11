@@ -142,7 +142,8 @@ const FEED = [
 ];
 
 const DETAIL = wirePost({
-  content: '# Heading\n\n- a\n- b',
+  content:
+    '# Heading\n\n- a\n- b\n\n![shot](solian://files/01M28ESTWBSXQSTMVVBYYFDXSK)\n\n![pixel](https://example.com/track.png)',
   visibility: 2,
   replies_count: 1,
   edited_at: new Date(Date.now() - HOUR_MS / 2).toISOString(),
@@ -406,6 +407,24 @@ check(
   texts('.kai-post__attach').map(tight),
 );
 check(
+  'a row shows the picture and reserves its box',
+  (() => {
+    const image = document.querySelector('li.kai-post .kai-attachment__image');
+    return (
+      Boolean(image) &&
+      image.getAttribute('src') === 'https://api.solian.app/drive/files/01M28ESTWBSXQSTMVVBYYFDXSK' &&
+      image.getAttribute('width') === '810' &&
+      image.getAttribute('height') === '1440'
+    );
+  })(),
+  (() => {
+    const image = document.querySelector('li.kai-post .kai-attachment__image');
+    return image
+      ? { src: image.getAttribute('src'), w: image.getAttribute('width'), h: image.getAttribute('height') }
+      : null;
+  })(),
+);
+check(
   'rows show the reply, boost and reaction counts',
   // Vue condenses the whitespace between the three spans away, so compare the
   // label sequence rather than the rendered spacing.
@@ -414,20 +433,26 @@ check(
   text('.kai-post__counts'),
 );
 check(
-  'the status bar inset only applies where the bar overlaps the app',
+  'the status bar space is reserved unless the platform reserved it already',
   statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 320 }) ===
     STATUS_BAR_PX &&
+    // Handset that reserved the space: reserving it again would double the gap.
     statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 294 }) === 0 &&
-    statusBarInset({ screenWidth: 1024, screenHeight: 768, innerWidth: 1024, innerHeight: 768 }) === 0,
+    // Dev server and simulator: `screen` is a monitor, so nothing was reserved.
+    statusBarInset({ screenWidth: 800, screenHeight: 600, innerWidth: 240, innerHeight: 320 }) ===
+      STATUS_BAR_PX &&
+    statusBarInset({ screenWidth: 1024, screenHeight: 768, innerWidth: 1024, innerHeight: 768 }) ===
+      STATUS_BAR_PX,
   [
     statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 320 }),
     statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 294 }),
+    statusBarInset({ screenWidth: 800, screenHeight: 600, innerWidth: 240, innerHeight: 320 }),
     statusBarInset({ screenWidth: 1024, screenHeight: 768, innerWidth: 1024, innerHeight: 768 }),
   ],
 );
 check(
-  'a desktop-sized viewport leaves the header unpadded',
-  document.documentElement.style.getPropertyValue('--kai-safe-top') === '0px',
+  'the title bar reserves the status bar space',
+  document.documentElement.style.getPropertyValue('--kai-safe-top') === '26px',
   document.documentElement.style.getPropertyValue('--kai-safe-top'),
 );
 
@@ -519,6 +544,32 @@ check(
   texts('.kai-content > div.kai-post .kai-post__attach').map(tight).join(' | ') ===
     '[post_attach_file] notes.pdf · 1.5 KB',
   texts('.kai-content > div.kai-post .kai-post__attach').map(tight),
+);
+check(
+  'an inline file image is rendered, and a foreign one is not fetched',
+  (() => {
+    const photos = all('.kai-md__photo');
+    const marker = document.querySelector('.kai-md__image');
+    const foreign = all('img').filter((image) => (image.getAttribute('src') || '').indexOf('example.com') !== -1);
+    return (
+      photos.length === 1 &&
+      photos[0].getAttribute('src') === 'https://api.solian.app/drive/files/01M28ESTWBSXQSTMVVBYYFDXSK' &&
+      photos[0].getAttribute('alt') === 'shot' &&
+      Boolean(marker) &&
+      marker.textContent === '[image]' &&
+      foreign.length === 0
+    );
+  })(),
+  {
+    photos: all('.kai-md__photo').map((image) => image.getAttribute('src')),
+    marker: text('.kai-md__image'),
+    foreignImages: all('img').map((image) => image.getAttribute('src')),
+  },
+);
+check(
+  'a document attachment is a line, not a picture',
+  all('.kai-content > div.kai-post .kai-attachment__image').length === 0,
+  all('.kai-content > div.kai-post .kai-attachment__image').length,
 );
 
 const replyRows = all('li.kai-post');
