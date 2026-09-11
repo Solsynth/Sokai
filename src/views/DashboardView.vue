@@ -3,17 +3,22 @@
     <KaiHeader :title="t('app_title')" />
 
     <main class="kai-content">
-      <!-- The reference dashboard leads with a clock: it needs nothing from the
-           network, so the screen has something alive on it before any request
-           resolves. Seconds tick only while this screen is mounted. -->
-      <p class="kai-clock">
-        <span class="kai-clock__time">{{ time }}</span>
-        <span class="kai-clock__date">{{ date }}</span>
-      </p>
+      <!--
+        The reference dashboard leads with a clock. It needs nothing from the
+        network, so the screen has something alive on it before any request
+        resolves — and it sits on the background, not on a card.
+      -->
+      <div class="kai-hero">
+        <img class="kai-hero__mark" src="/img/icons/icon-mark-dark.png" alt="" />
+        <div class="kai-hero__clock">
+          <p class="kai-hero__time">{{ time }}</p>
+          <p class="kai-hero__date">{{ date }}</p>
+        </div>
+      </div>
 
       <!-- Everything the app can do that is not the post list. Adding a screen
            means adding a row here and a view to `App.vue`. -->
-      <KaiList>
+      <KaiList class="kai-list--flat">
         <KaiListItem
           v-for="entry in ENTRIES"
           :key="entry.view"

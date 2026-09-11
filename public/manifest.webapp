@@ -7,7 +7,10 @@
   "icons": {
     "16": "/img/icons/icon16x16.png",
     "48": "/img/icons/icon48x48.png",
+    "56": "/img/icons/icon56x56.png",
     "60": "/img/icons/icon60x60.png",
+    "84": "/img/icons/icon84x84.png",
+    "112": "/img/icons/icon112x112.png",
     "128": "/img/icons/icon128x128.png"
   },
   "developer": {

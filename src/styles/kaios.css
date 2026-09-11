@@ -31,6 +31,8 @@ html {
   --kai-fs-p-pri: 1.7rem;
   --kai-fs-p-sec: 1.4rem;
   --kai-fs-p-thi: 1.2rem;
+  /* The one size outside the guide's ramp: a clock is a display element. */
+  --kai-fs-display: 2.4rem;
   --kai-fw-regular: 400;
   --kai-fw-semibold: 600;
 
@@ -139,25 +141,52 @@ body {
 
 /* --- Dashboard ------------------------------------------------------ */
 
-.kai-clock {
+/* Mark and clock sit directly on the background: not everything here is a card. */
+.kai-hero {
   display: flex;
-  align-items: baseline;
-  margin: 0 0 1.2rem;
-  padding: 0.6rem var(--kai-gutter);
-  border-radius: var(--kai-radius);
-  background: var(--kai-color-surface);
-  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+  align-items: center;
+  margin: 1.2rem 0 1.6rem;
 }
 
-.kai-clock__time {
-  font-size: var(--kai-fs-h1);
+.kai-hero__mark {
+  width: auto;
+  height: 3.2rem;
+}
+
+.kai-hero__clock {
+  margin-left: 1.2rem;
+}
+
+.kai-hero__time {
+  margin: 0;
+  font-size: var(--kai-fs-display);
   font-weight: var(--kai-fw-semibold);
 }
 
-.kai-clock__date {
-  margin-left: 0.8rem;
+.kai-hero__date {
+  margin: 0.2rem 0 0;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-sec);
+}
+
+/* The dashboard is a menu, not a stack of cards: hairline separators, no radius,
+   no shadow — the KaiOS sample app's own list look. Selection still takes the
+   accent, which is what makes the row the current one. */
+.kai-list--flat {
+  margin: 0;
+}
+
+.kai-list--flat .kai-list-item {
+  margin-bottom: 0;
+  border-radius: 0;
+  border-top: 0.1rem solid var(--kai-color-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+.kai-list--flat .kai-list-item[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
 }
 
 /* --- Header --------------------------------------------------------- */

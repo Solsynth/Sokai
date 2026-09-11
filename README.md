@@ -124,13 +124,24 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   `--kai-color-surface` measures 3.8:1; WCAG AA asks 4.5:1 for body text, so those are the two
   pairs to re-measure on a re-theme (accent-coloured text is the markdown link, the `[image]`
   marker and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
-  and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1.
-- **Dashboard** — the root screen, after the reference client's dashboard: a clock card (nothing
-  from the network, so the screen is alive before the first request resolves) and one card per
-  top-level screen, each with a title and a one-line description. It is the extension point — a
-  new screen is a row in `DashboardView.vue`'s `ENTRIES` plus a view in `App.vue`'s map — and it
-  makes no requests of its own. Back at the root is not consumed, so the platform takes it and
-  leaves the app.
+  and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1. Secondary text is the other known
+  shortfall: `--kai-color-text-muted` measures 2.4:1 on `--kai-color-surface` and 2.1:1 on the
+  page background the flat dashboard rows sit on.
+- **Dashboard** — the root screen, after the reference client's dashboard: the brand mark and a
+  clock, both directly on the background (no card), then one flat row per top-level screen with a
+  hairline separator and the accent for the current row — the KaiOS sample app's own list look.
+  The clock needs nothing from the network, so the screen is alive before the first request
+  resolves. This is the extension point — a new screen is a row in `DashboardView.vue`'s
+  `ENTRIES` plus a view in `App.vue`'s map — and the dashboard itself makes no requests. Back at
+  the root is not consumed, so the platform takes it and leaves the app.
+- **Icons** — the Solar Network brand artwork from the Solian client's asset set, whose licence is
+  copied to `public/img/icons/LICENSE.md` next to it (that licence is not the Apache-2.0 the rest
+  of this repository uses). Generated from the 2050px padded source at 78% coverage of a square
+  transparent canvas, so a circular launcher mask cannot clip the mark: 16, 48, **56**, 60, **84**,
+  **112**, 128 — 56/112 are what the KaiStore asks for and 84 what the JioStore asks for, none of
+  which the scaffold had. `icon-mark-dark.png` is the same artwork in dark ink, for the dashboard
+  hero on this app's light background (the light variant is the launcher one). The 2014 vector
+  logo that used to sit there is gone with them.
 - **Post detail** — attachments live outside the post card, flush against its top edge; when the
   block holds a picture the touching corners are squared off so the two read as one column.
   `kai-content--roomy` adds the 12px of breathing room below the header that the card would

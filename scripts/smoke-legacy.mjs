@@ -265,10 +265,11 @@ const PREAMBLE = `<script>
 const DIST = path.resolve('dist');
 const distUrl = pathToFileURL(DIST + path.sep).href;
 
-// The package uses root-absolute URLs, which is correct on a device (the app is
-// served from its origin root) but means nothing to a file path. Rebase them
-// onto dist/ so the loader can fetch them; the tag order and attributes — the
-// things under test — are untouched.
+// Vite emits relative asset URLs (`base: './'`), which is what a packaged app
+// wants: on a device the app is served from its own origin root, so `./js/app.js`
+// resolves exactly like `/js/app.js`, and off-device it also works from a file
+// path. This rebase stays as a guard for any root-absolute URL that creeps back
+// in; the tag order and attributes - the things under test - are untouched.
 const html = readFileSync(path.join(DIST, 'index.html'), 'utf8')
   .replace(/(src|href)="\//g, `$1="${distUrl}`)
   .replace(/<script\b[^>]*\bsrc="[^"]*l10n\.js"[^>]*><\/script>/, PREAMBLE);
@@ -342,8 +343,26 @@ check(
 );
 check(
   'the dashboard clock shows a time and a date',
-  /^\d{2}:\d{2}:\d{2}$/.test(text('.kai-clock__time')) && /^\d{4}-\d{2}-\d{2}$/.test(text('.kai-clock__date')),
-  { time: text('.kai-clock__time'), date: text('.kai-clock__date') },
+  /^\d{2}:\d{2}:\d{2}$/.test(text('.kai-hero__time')) && /^\d{4}-\d{2}-\d{2}$/.test(text('.kai-hero__date')),
+  { time: text('.kai-hero__time'), date: text('.kai-hero__date') },
+);
+check(
+  'the dashboard shows the brand mark on the background',
+  (() => {
+    const mark = document.querySelector('.kai-hero__mark');
+    // Vite resolves a public asset reference against the script's own URL, so the
+    // attribute is absolute in the package; what matters is which file it names.
+    const src = mark ? mark.getAttribute('src') || '' : '';
+    return src.slice(-'img/icons/icon-mark-dark.png'.length) === 'img/icons/icon-mark-dark.png';
+  })(),
+  (document.querySelector('.kai-hero__mark') || {}).getAttribute
+    ? document.querySelector('.kai-hero__mark').getAttribute('src')
+    : null,
+);
+check(
+  'the dashboard entries are rows, not cards',
+  Boolean(document.querySelector('.kai-list--flat')) && all('.kai-list-item').length === 2,
+  { flat: Boolean(document.querySelector('.kai-list--flat')), entries: all('.kai-list-item').length },
 );
 check('the dashboard asks the network for nothing', requests.length === 0, requests.length);
 
