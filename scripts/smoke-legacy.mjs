@@ -826,7 +826,7 @@ check(
     return (
       s.boxShadow !== 'none' &&
       s.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
-      s.borderRadius !== '0px'
+      s.borderRadius === '0px'
     );
   })(),
   bodyCard
@@ -885,7 +885,7 @@ check(
       photos[0].getAttribute('src') === 'https://api.solian.app/drive/files/01M28ESTWBSXQSTMVVBYYFDXSK' &&
       photos[0].getAttribute('alt') === 'shot' &&
       Boolean(marker) &&
-      marker.textContent === '[image]' &&
+      marker.textContent === 'pixel' &&
       foreign.length === 0
     );
   })(),

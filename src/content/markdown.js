@@ -135,7 +135,14 @@ function plainText(post) {
  */
 function neutralize(html) {
   return html
-    .replace(IMG_TAG, '<span class="kai-md__image">[image]</span>')
+    // An image that cannot be shown keeps its purpose as text: the marker
+    // carries the alt text (`![pixel](…)` renders as "pixel"), falling back to
+    // the bare marker only when there is no alt to say.
+    .replace(IMG_TAG, (tag) => {
+      const alt = /alt="([^"]*)"/.exec(tag);
+      const text = alt && alt[1] ? alt[1] : '[image]';
+      return '<span class="kai-md__image">' + text + '</span>';
+    })
     .replace(ANCHOR_OPEN, '<span class="kai-md__link">')
     .replace(ANCHOR_CLOSE, '</span>');
 }

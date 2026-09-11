@@ -160,7 +160,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Post detail** — attachments live outside the post card, flush against its top edge; both are
   pulled out over the content gutter so their edges snap to the screen edges — pictures square
   their corners, since the screen edge is the frame. The body — the non-attachment section — is
-  a card: surface, shadow, rounded corners, full-bleed so the shadow spills only at the top and
+  a card: surface, shadow, square corners, full-bleed so the shadow spills only at the top and
   bottom. `kai-content--roomy` adds the 12px of breathing room below the header that the card
   would otherwise lose to it.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiPager`, `KaiSpinner`,
@@ -183,8 +183,8 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   that fails to load falls back to the caption, `[image]` included.
   - Inline `![alt](solian://files/{id})` images in a body are rendered too — markdown-it drops any
     `src` outside its scheme allowlist, so that one scheme is admitted in `src/content/markdown.js`
-    and nothing else is: an image pointing anywhere else on the internet stays the `[image]` marker
-    and is never fetched.
+    and nothing else is: an image pointing anywhere else on the internet becomes a muted marker
+    carrying its alt text (`![pixel](…)` renders as "pixel") and is never fetched.
   - The privileged app CSP already starts at `default-src * data: blob:`
     (`security.apps.privileged.CSP.default`), so remote images need no manifest `csp` entry —
     and a `csp` value can only ever be *stricter* than that default.

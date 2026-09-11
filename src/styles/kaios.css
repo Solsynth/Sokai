@@ -491,15 +491,16 @@ body {
 }
 
 /*
- * The detail body is a card — surface, shadow, rounded — while the feed rows
- * stay hairlines. It is pulled out over the content gutter so its edges snap
- * to the screen edges: the shadow spills only at the top and bottom.
+ * The detail body is a card — surface, shadow, square corners — while the feed
+ * rows stay hairlines. It is pulled out over the content gutter so its edges
+ * snap to the screen edges: the shadow spills only at the top and bottom, and
+ * the corners are square because the screen edge is the frame.
  */
 .kai-content > div.kai-post {
   margin: 0 calc(-1 * var(--kai-gutter));
   background-color: var(--kai-color-surface);
   box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
-  border-radius: var(--kai-radius);
+  border-radius: 0;
 }
 
 /*
