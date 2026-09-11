@@ -157,12 +157,12 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   which the scaffold had. `icon-mark-dark.png` is the same artwork in dark ink, for the dashboard
   hero on this app's light background (the light variant is the launcher one). The 2014 vector
   logo that used to sit there is gone with them.
-- **Post detail** — attachments live outside the post card, flush against its top edge; when the
-  block holds a picture the touching corners are squared off so the two read as one column. The
-  body — the non-attachment section — is a card: surface, shadow, rounded corners, spanning the
-  content edge to edge with no horizontal margin, so the shadow reads as depth rather than a
-  floating tile. `kai-content--roomy` adds the 12px of breathing room below the header that the
-  card would otherwise lose to it.
+- **Post detail** — attachments live outside the post card, flush against its top edge; both are
+  pulled out over the content gutter so their edges snap to the screen edges — pictures square
+  their corners, since the screen edge is the frame. The body — the non-attachment section — is
+  a card: surface, shadow, rounded corners, full-bleed so the shadow spills only at the top and
+  bottom. `kai-content--roomy` adds the 12px of breathing room below the header that the card
+  would otherwise lose to it.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiPager`, `KaiSpinner`,
   `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
   kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option

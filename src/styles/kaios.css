@@ -492,10 +492,11 @@ body {
 
 /*
  * The detail body is a card — surface, shadow, rounded — while the feed rows
- * stay hairlines. No horizontal margin: it spans the content edge to edge, so
- * the shadow reads as depth, not as a floating tile.
+ * stay hairlines. It is pulled out over the content gutter so its edges snap
+ * to the screen edges: the shadow spills only at the top and bottom.
  */
 .kai-content > div.kai-post {
+  margin: 0 calc(-1 * var(--kai-gutter));
   background-color: var(--kai-color-surface);
   box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
   border-radius: var(--kai-radius);
@@ -628,7 +629,14 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
  * the picture is the post, the text is what it says.
  */
 .kai-post-extras {
-  margin-bottom: 0;
+  /* Pulled out over the content gutter, so the attachments run to the screen
+     edges like the card they sit on. */
+  margin: 0 calc(-1 * var(--kai-gutter));
+}
+
+/* Edge-snapped pictures square their corners: the screen edge is the frame. */
+.kai-post-extras .kai-attachment__image {
+  border-radius: 0;
 }
 
 /*
