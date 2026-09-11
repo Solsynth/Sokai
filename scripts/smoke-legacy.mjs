@@ -433,8 +433,31 @@ check('header renders a localised title', text('.kai-header__title') === 'nav_ex
 check('first row starts selected', rows[0] && rows[0].getAttribute('nav-selected') === 'true', navState(rows));
 
 check(
+  'the page controls sit above the feed',
+  (() => {
+    const pager = document.querySelector('.kai-pager');
+    const list = document.querySelector('.kai-content > ul.kai-list--flat');
+    return Boolean(pager) && pager.nextElementSibling === list;
+  })(),
+  (() => {
+    const pager = document.querySelector('.kai-pager');
+    const list = document.querySelector('.kai-content > ul.kai-list--flat');
+    return {
+      pager: Boolean(pager),
+      nextSibling: pager ? pager.nextElementSibling && pager.nextElementSibling.className : null,
+      isPostList: pager ? pager.nextElementSibling === list : null,
+    };
+  })(),
+);
+check(
+  'the highlight starts on the first post, not the page controls',
+  rows[0].getAttribute('nav-selected') === 'true' && !document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]'),
+  { rows: navState(rows), pager: Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')) },
+);
+
+check(
   'the post list is a flat list',
-  Boolean(document.querySelector('.kai-content > ul.kai-list--flat')),
+  document.querySelectorAll('.kai-content > ul.kai-list--flat > li.kai-post').length === 2,
   all('ul').map((list) => list.className),
 );
 const listRequest = requests.filter(
@@ -584,9 +607,9 @@ check(
 
 await press('ArrowUp');
 check(
-  'UP at the top wraps to the end',
-  Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')),
-  { pagerSelected: Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')) },
+  'UP above the first post reaches the page controls',
+  Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')),
+  { pagerSelected: Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')) },
 );
 
 /* --- Page flip ---------------------------------------------------------- */
@@ -598,8 +621,8 @@ check(
   { pager: texts('.kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
 );
 
-// The highlight wrapped onto the pager row, so Enter flips the page. The stub
-// holds the response for a moment so the loading UI is observable.
+// The highlight is on the pager row above the feed, so Enter flips the page.
+// The stub holds the response for a moment so the loading UI is observable.
 await press('Enter');
 await until(() => Boolean(document.querySelector('.kai-spinner')));
 const ring = window.getComputedStyle(document.querySelector('.kai-spinner__ring'));
@@ -639,8 +662,8 @@ check(
   navState(flippedRows),
 );
 check(
-  'the softkey offers the next page while there is one',
-  text('.kai-softkey__key--right') === 'action_next_page',
+  'the right softkey is reserved on Explore, not a page flip',
+  text('.kai-softkey__key--right') === '',
   text('.kai-softkey__key--right'),
 );
 

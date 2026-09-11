@@ -10,6 +10,11 @@
           {{ t('error_load_failed') }}
         </p>
 
+        <!-- The page controls sit above the feed: flipping is a list action,
+             not something hidden twenty rows down. The posts mark themselves
+             `initial`, so the highlight still starts on the first post. -->
+        <KaiPager v-if="pages > 1" :page="page" :pages="pages" @go="load" />
+
         <KaiList class="kai-list--flat">
           <KaiPostRow
             v-for="post in posts"
@@ -20,8 +25,6 @@
 
           <KaiListItem v-if="status === 'error'" :primary="t('error_retry')" @select="retry" />
         </KaiList>
-
-        <KaiPager :page="page" :pages="pages" @go="load" />
       </template>
     </main>
   </div>
@@ -82,19 +85,15 @@ function retry() {
   load(requested.value);
 }
 
-function nextPage() {
-  load(page.value + 1);
-}
-
 onMounted(() => {
   setBaseSoftkeys(() => ({
     // Explore is reached from the dashboard, so Back is the way up; About is a
     // dashboard entry now, not a softkey here.
     left: { label: t('action_back'), onPress: pop },
     center: { label: t('action_open') },
-    // Flipping to the next page is the other thing this screen does, and it fits
-    // the key that is otherwise empty. Gone on the last page, like the row.
-    right: page.value < pages.value ? { label: t('action_next_page'), onPress: nextPage } : { label: '' },
+    // The right key is held for the write actions that follow the read path
+    // (reply, reactions); page flips live in the pager rows above the feed.
+    right: { label: '' },
   }));
 
   load(1);

@@ -21,9 +21,11 @@ import KaiListItem from './KaiListItem.vue';
 import { t } from '../kaios/l10n.js';
 
 /**
- * Page flip controls for an offset-paginated list. Both rows are ordinary
- * selectable rows, so the D-pad reaches them at the end of the list — and the
- * caller can put the same action on a softkey.
+ * Page flip controls for an offset-paginated list, rendered above the feed.
+ * Both rows are ordinary selectable rows, so the D-pad reaches them from the
+ * posts — UP from the first post, or the list loop wrapping around the end.
+ * The posts mark themselves `initial`, so the highlight does not land on the
+ * controls when the screen mounts.
  */
 defineProps({
   /** 1-based. */

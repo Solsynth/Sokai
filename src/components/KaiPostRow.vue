@@ -95,6 +95,9 @@ onMounted(() => {
   uid.value = registerSelectable({
     el: root,
     onEnter: () => emit('select'),
+    // Posts are the screen's primary content: the highlight starts here even
+    // when the page-flip controls sit above the list.
+    initial: true,
   });
 });
 

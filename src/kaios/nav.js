@@ -126,18 +126,23 @@ function refresh() {
   }
 
   if (!list.some((entry) => entry.uid === nav.current)) {
-    select(list[0]);
+    // Primary content marks itself `initial`, so the highlight lands on the
+    // first post (or post body) rather than on whatever comes first in document
+    // order — the page-flip controls that sit above the feed.
+    select(list.find((entry) => entry.initial) || list[0]);
   }
 }
 
 /**
- * @param {{ el: object, onEnter?: Function|null, scrollFirst?: boolean }} entry
+ * @param {{ el: object, onEnter?: Function|null, scrollFirst?: boolean, initial?: boolean }} entry
  *   `el` is a template ref. `scrollFirst` gives a tall element — a post body —
- *   the arrow keys until it has been scrolled to its end.
+ *   the arrow keys until it has been scrolled to its end. `initial` makes the
+ *   element eligible for the highlight when a screen mounts: primary content
+ *   marks itself, chrome such as pager rows does not.
  * @returns {number} uid to pass back to `unregisterSelectable`
  */
-export function registerSelectable({ el, onEnter = null, scrollFirst = false }) {
-  const entry = { uid: ++nextUid, el, onEnter, scrollFirst };
+export function registerSelectable({ el, onEnter = null, scrollFirst = false, initial = false }) {
+  const entry = { uid: ++nextUid, el, onEnter, scrollFirst, initial };
   registry.push(entry);
   scheduleRefresh();
   return entry.uid;

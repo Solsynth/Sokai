@@ -241,8 +241,10 @@ onMounted(() => {
   uid.value = registerSelectable({
     el: body,
     // A post longer than the screen gets the arrow keys until it is scrolled to
-    // the end; the highlight only then moves on to a reply.
+    // the end; the highlight only then moves on to a reply. `initial` keeps the
+    // highlight on the body when the screen mounts, not on the first reply.
     scrollFirst: true,
+    initial: true,
   });
 
   setBaseSoftkeys(() => ({

@@ -9,8 +9,10 @@ Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 The app opens on a **dashboard** — the brand mark with a clock and a countdown to the next
 Solar Network event, and one row per top-level screen, currently Explore and About, with room
 for the log-in and notification entries that come next. Explore lists public Solar Network posts
-from `api.solian.app`, with pictures; opening one shows its body as markdown, its attachments
-above the card, and its replies underneath. D-pad and softkeys only.
+from `api.solian.app`, with pictures, and the page-flip controls sit above the feed; opening one
+shows its body as markdown, its attachments above the card, and its replies underneath. D-pad
+and softkeys only. The right softkey is held for the write actions that follow the read path —
+reply, reactions — and is empty until they land.
 
 Every read route is anonymous — no `Authorization` header — and the server limits anonymous
 responses to published, non-draft, public posts. Composing, reactions and video playback are not
@@ -100,12 +102,13 @@ every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
 key events against canned copies of the Solar Network responses: the dashboard's entries, clock,
 countdown and the bare circular spinner it shows while a page flips, the post-list request
-(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), D-pad movement and
-list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to open a post
+(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), the pager above the feed
+with the highlight starting on the first post, D-pad movement and list-loop wrap, the row's
+quote, picture, attachment and count lines, `Enter` to open a post
 whose body must render as markdown rather than as escaped text (with its quoted parent rendered
 as markdown too, its attachments above the card, and only Solar Network file images fetched), the
 replies that arrive with it, the status-bar inset rule, and `Back` at the top level falling
-through to the platform. 68 assertions. This is the check that proves the polyfills are actually
+through to the platform. 70 assertions. This is the check that proves the polyfills are actually
 present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
@@ -193,9 +196,12 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
-  than the screen and unreachable. Selection is tracked in `src/kaios/nav.js` by uid so Vue stays
-  authoritative over the DOM; `[nav-selectable]` / `[nav-selected="true"]` attributes are kept
-  for CSS and tooling compatibility.
+  than the screen and unreachable. The feed's page-flip controls sit above the posts, reachable
+  with `Up` from the first post or by wrapping past the last; primary content registers as
+  `initial`, so the highlight starts on the first post rather than on the controls. Selection is
+  tracked in `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
+  `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
+  compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the
   guide, Back inside a text field clears a character and D-pad moves the caret, so the handler
   stays out of the way while a text field has focus; at the top level Back is not consumed and
