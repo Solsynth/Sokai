@@ -224,6 +224,17 @@ const PREAMBLE = `<script>
   delete window.IntersectionObserver;
   delete window.globalThis;
 
+  /* Gecko 48 only knows the boolean form of scrollIntoView: the options-object
+     form (Firefox 50+) throws, and the app must never call it. A throw here
+     fails the gate exactly where the handset would. */
+  Element.prototype.scrollIntoView = function (arg) {
+    if (arg !== undefined && typeof arg !== 'boolean') {
+      throw new TypeError(
+        "'block' member of ScrollIntoViewOptions 'nearest' is not a valid value for enumeration ScrollLogicalPosition."
+      );
+    }
+  };
+
   /* Deterministic stand-in for public/js/libs/l10n.js: get() echoes the id —
      and the placeholder names it was handed — so assertions also prove strings
      flow through the l10n layer with the right argument names. once() is

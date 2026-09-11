@@ -72,8 +72,36 @@ function select(entry) {
   // Focus moves the native scroll region and puts the platform's own input
   // handling (text edit mode) on the right element.
   if (typeof node.focus === 'function') node.focus();
-  if (typeof node.scrollIntoView === 'function') {
-    node.scrollIntoView({ block: 'nearest' });
+  scrollIntoViewNearest(node);
+}
+
+/**
+ * Brings `node` into the visible region with the least scroll, the way
+ * `scrollIntoView({ block: 'nearest' })` would. The options-object form is
+ * Firefox 50+ — on Gecko 48 it throws (`'block' member of ScrollIntoViewOptions
+ * ... not a valid value for enumeration ScrollLogicalPosition`) from inside
+ * Vue's `nextTick` promise, which is how it surfaces as an unhandled rejection
+ * — and the boolean form that 48 does know jumps the node to the top of the
+ * region even when it is already fully visible. This app scrolls exactly one
+ * region (`.kai-content`, the layout contract `scrollContent` also relies on),
+ * so "nearest" is computed against it.
+ */
+function scrollIntoViewNearest(node) {
+  const scroller = document.querySelector('.kai-content');
+  if (!scroller) {
+    if (typeof node.scrollIntoView === 'function') node.scrollIntoView(true);
+    return;
+  }
+
+  const regionTop = scroller.getBoundingClientRect().top;
+  const regionBottom = regionTop + scroller.clientHeight;
+  const nodeTop = node.getBoundingClientRect().top;
+  const nodeBottom = node.getBoundingClientRect().bottom;
+
+  if (nodeTop < regionTop) {
+    scroller.scrollTop += nodeTop - regionTop;
+  } else if (nodeBottom > regionBottom) {
+    scroller.scrollTop += nodeBottom - regionBottom;
   }
 }
 
