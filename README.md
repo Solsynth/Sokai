@@ -179,7 +179,9 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   (Gecko 48 has no `loading="lazy"`, so the intrinsic size is the only placeholder available). The
   server answers `307` to a signed object-storage URL and serves a compressed WebP: 24kB–350kB
   across five sampled posts. A row crops its one picture to 120px (`object-fit: cover`, Firefox
-  32+) and keeps the metadata as its caption; the detail screen shows each picture whole. An image
+  32+), square and snapped to the screen edges, and keeps the metadata as its caption; the detail
+  screen shows each picture whole and captionless — the picture is the post — while documents and
+  videos keep their line. An image
   that fails to load falls back to the caption, `[image]` included.
   - Inline `![alt](solian://files/{id})` images in a body are rendered too — markdown-it drops any
     `src` outside its scheme allowlist, so that one scheme is admitted in `src/content/markdown.js`

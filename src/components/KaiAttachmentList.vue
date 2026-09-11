@@ -13,7 +13,11 @@
         @error="fail(attachment.id)"
       />
 
-      <p class="kai-post__attach">
+      <!-- A picture's caption is optional: the detail screen shows the picture
+           whole and needs no line under it, while a row summarises with one.
+           Non-picture attachments always keep their line — a document has only
+           text to be. A failed picture falls back to its line either way. -->
+      <p v-if="showCaptions || !attachment.src || failed[attachment.id]" class="kai-post__attach">
         <span class="kai-post__attach-kind">[{{ t(attachment.kindKey) }}]</span>
         {{ attachment.detail }}
       </p>
@@ -36,6 +40,8 @@ const props = defineProps({
   attachments: { type: Array, required: true },
   /** Rows render one line and count the rest; `0` renders every attachment. */
   limit: { type: Number, default: 0 },
+  /** Rows caption their pictures; the detail shows them whole, captionless. */
+  showCaptions: { type: Boolean, default: true },
 });
 
 /** id of every attachment whose file failed to load, so its line stands alone. */

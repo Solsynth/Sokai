@@ -9,7 +9,7 @@
         so the D-pad scrolls the text, not the picture.
       -->
       <div v-if="post && post.attachments.length" class="kai-post-extras">
-        <KaiAttachmentList :attachments="post.attachments" />
+        <KaiAttachmentList :attachments="post.attachments" :show-captions="false" />
       </div>
 
       <!--

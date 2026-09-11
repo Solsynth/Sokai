@@ -665,6 +665,12 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
 li.kai-post .kai-attachment__image {
   max-height: 12rem;
   object-fit: cover;
+  /* Square and snapped to the screen edges, like the detail pictures: the
+     content width plus both gutters, pulled out over the row's own padding.
+     (Negative margins alone would shift the 100% box without widening it.) */
+  border-radius: 0;
+  width: calc(100% + 2 * var(--kai-gutter));
+  margin: 0.4rem calc(-1 * var(--kai-gutter)) 0;
 }
 
 .kai-md__photo {

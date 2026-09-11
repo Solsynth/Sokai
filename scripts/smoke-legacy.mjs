@@ -148,7 +148,10 @@ const DETAIL = wirePost({
   replies_count: 1,
   edited_at: new Date(Date.now() - HOUR_MS / 2).toISOString(),
   tags: [{ name: 'sokai' }, { name: null }],
-  attachments: [{ id: 'd1', name: 'notes.pdf', mime_type: 'application/pdf', size: 1536 }],
+  attachments: [
+    { id: 'p1', name: 'photo.jpg', mime_type: 'image/jpeg', size: 630784, width: 3024, height: 1898 },
+    { id: 'd1', name: 'notes.pdf', mime_type: 'application/pdf', size: 1536 },
+  ],
   forwarded_post_id: FORWARD_ID,
   forwarded_post: {
     id: FORWARD_ID,
@@ -551,6 +554,17 @@ check(
   })(),
 );
 check(
+  'a row picture is square, snapped to the screen edges',
+  (() => {
+    const image = document.querySelector('li.kai-post .kai-attachment__image');
+    return Boolean(image) && window.getComputedStyle(image).borderRadius === '0px';
+  })(),
+  (() => {
+    const image = document.querySelector('li.kai-post .kai-attachment__image');
+    return image ? window.getComputedStyle(image).borderRadius : null;
+  })(),
+);
+check(
   'rows show the reply, boost and reaction counts',
   // Vue condenses the whitespace between the three spans away, so compare the
   // label sequence rather than the rendered spacing.
@@ -869,7 +883,7 @@ check(
   },
 );
 check(
-  'the detail lists every attachment',
+  'a detail picture shows no caption; documents keep their line',
   texts('.kai-post-extras .kai-post__attach').map(tight).join(' | ') ===
     '[post_attach_file] notes.pdf · 1.5 KB',
   texts('.kai-post-extras .kai-post__attach').map(tight),
@@ -895,9 +909,14 @@ check(
   },
 );
 check(
-  'a document attachment is a line, not a picture',
-  all('.kai-post-extras .kai-attachment__image').length === 0,
-  all('.kai-post-extras .kai-attachment__image').length,
+  'the document stays a line; the picture is the only image',
+  all('.kai-post-extras img').length === 1 &&
+    all('.kai-post-extras .kai-attachment__image').length === 1 &&
+    all('.kai-post-extras .kai-post__attach').length === 1,
+  {
+    images: all('.kai-post-extras img').length,
+    lines: all('.kai-post-extras .kai-post__attach').length,
+  },
 );
 
 const replyRows = all('li.kai-post');
