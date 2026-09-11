@@ -817,6 +817,29 @@ check(
   bodyCard && bodyCard.getAttribute('nav-selected'),
 );
 check(
+  'the detail body is a card with a shadow and no horizontal margin',
+  (() => {
+    if (!bodyCard) return false;
+    const s = window.getComputedStyle(bodyCard);
+    return (
+      s.boxShadow !== 'none' &&
+      s.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+      s.borderRadius !== '0px' &&
+      (s.marginLeft === '0px' || s.marginLeft === '0') &&
+      (s.marginRight === '0px' || s.marginRight === '0')
+    );
+  })(),
+  bodyCard
+    ? {
+        shadow: window.getComputedStyle(bodyCard).boxShadow,
+        background: window.getComputedStyle(bodyCard).backgroundColor,
+        radius: window.getComputedStyle(bodyCard).borderRadius,
+        marginLeft: window.getComputedStyle(bodyCard).marginLeft,
+        marginRight: window.getComputedStyle(bodyCard).marginRight,
+      }
+    : null,
+);
+check(
   'the body carries author, timestamp, visibility, counts and tags',
   text('.kai-content > div.kai-post').indexOf('iCat') !== -1 &&
     text('.kai-post__time') === 'post_hours_ago(h)' &&

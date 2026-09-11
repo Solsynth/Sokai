@@ -491,6 +491,17 @@ body {
 }
 
 /*
+ * The detail body is a card — surface, shadow, rounded — while the feed rows
+ * stay hairlines. No horizontal margin: it spans the content edge to edge, so
+ * the shadow reads as depth, not as a floating tile.
+ */
+.kai-content > div.kai-post {
+  background-color: var(--kai-color-surface);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+  border-radius: var(--kai-radius);
+}
+
+/*
  * Rows, not cards. A hairline separates them, and it runs the full width of the
  * screen: the row is pulled out over the content gutter by exactly the amount its
  * own padding puts back, so the text keeps its inset while the divider — and the

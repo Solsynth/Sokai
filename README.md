@@ -109,10 +109,11 @@ one-row pager of always-present icon cells (previous, count, next; the inert bou
 dimmed) with the highlight starting on the first post, D-pad movement and list-loop wrap, the
 row's quote, picture, attachment and count lines, `Enter` to open a post
 whose body must render as markdown rather than as escaped text (with its quoted parent rendered
-as markdown too, its attachments above the card, and only Solar Network file images fetched), the
+as markdown too, its attachments above the card, the card body carrying a shadow with no
+horizontal margin, and only Solar Network file images fetched), the
 replies that arrive with it, the status-bar inset rule, the searchbar pushing the Search screen
 whose field starts highlighted and whose committed query hits the posts search endpoint, and
-`Back` at the top level falling through to the platform. 79 assertions. This is the check that
+`Back` at the top level falling through to the platform. 80 assertions. This is the check that
 proves the polyfills are actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
@@ -157,9 +158,11 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   hero on this app's light background (the light variant is the launcher one). The 2014 vector
   logo that used to sit there is gone with them.
 - **Post detail** — attachments live outside the post card, flush against its top edge; when the
-  block holds a picture the touching corners are squared off so the two read as one column.
-  `kai-content--roomy` adds the 12px of breathing room below the header that the card would
-  otherwise lose to it.
+  block holds a picture the touching corners are squared off so the two read as one column. The
+  body — the non-attachment section — is a card: surface, shadow, rounded corners, spanning the
+  content edge to edge with no horizontal margin, so the shadow reads as depth rather than a
+  floating tile. `kai-content--roomy` adds the 12px of breathing room below the header that the
+  card would otherwise lose to it.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiPager`, `KaiSpinner`,
   `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
   kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option
