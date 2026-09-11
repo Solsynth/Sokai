@@ -119,9 +119,12 @@ if (existsSync(htmlFile)) {
     fail('html', 'index.html still has crossorigin attributes');
   }
 
-  const scriptTags = html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) || [];
-  for (const tag of scriptTags) {
+  const bodyIndex = html.indexOf('<body');
+  const scriptTags = html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g);
+  for (const match of scriptTags) {
+    const tag = match[0];
     const src = /src\s*=\s*"([^"]*)"/.exec(tag);
+
     if (!src) {
       const body = tag.replace(/<[^>]*>/g, '').trim();
       if (body.length > 0) {
@@ -129,8 +132,22 @@ if (existsSync(htmlFile)) {
       }
       continue;
     }
+
     if (!existsSync(distPathForUrl(src[1]))) {
       fail('html', `<script src="${src[1]}"> does not exist in the package`);
+    }
+
+    // A classic script in <head> runs while the head is still being parsed, so
+    // `document.querySelector('#app')` is null and the app never mounts — a
+    // blank page with an empty #app, and only a race decides whether the mount
+    // throws or loses. `type="module"` used to provide deferred execution for
+    // free; removing it means `defer` has to be explicit. `async` is not a fix:
+    // it fires on arrival, which is the same problem.
+    if (bodyIndex !== -1 && match.index < bodyIndex && !/\sdefer\b/.test(tag)) {
+      fail(
+        'html',
+        `<script src="${src[1]}"> is in <head> without defer — it runs before #app exists, so the app cannot mount`,
+      );
     }
   }
 
@@ -183,15 +200,28 @@ for (const file of cssFiles) {
 /* --- Manifest ------------------------------------------------------------ */
 
 const manifestFile = path.join(DIST, 'manifest.webapp');
-const sourceManifest = 'manifest.webapp';
+const sourceManifest = path.join('public', 'manifest.webapp');
+
+// Only `dist/` may be an installable package. A manifest at the repository root
+// makes the project folder look like an app to KaiOS WebIDE and the simulator,
+// which then package the entire project (node_modules included) and load the
+// source index.html — a blank page with an empty #app and no error anywhere.
+if (existsSync('manifest.webapp')) {
+  fail(
+    'layout',
+    'manifest.webapp exists at the repo root: WebIDE would package the whole project and load the unusable source index.html instead of dist/',
+  );
+}
 
 if (!existsSync(manifestFile)) {
-  fail('manifest', 'dist/manifest.webapp is missing');
+  fail('manifest', 'dist/manifest.webapp is missing (source: public/manifest.webapp)');
 } else {
   const raw = readFileSync(manifestFile, 'utf8');
 
-  if (existsSync(sourceManifest) && raw !== readFileSync(sourceManifest, 'utf8')) {
-    fail('manifest', 'dist/manifest.webapp does not match the manifest in the repo root');
+  if (!existsSync(sourceManifest)) {
+    fail('manifest', `${sourceManifest} is missing; it is the source of the shipped manifest`);
+  } else if (raw !== readFileSync(sourceManifest, 'utf8')) {
+    fail('manifest', 'dist/manifest.webapp does not match public/manifest.webapp');
   }
 
   let manifest = null;

@@ -117,10 +117,34 @@ export function unregisterSelectable(uid) {
   scheduleRefresh();
 }
 
-/** Moves the highlight by `delta`, wrapping around the ends of the list. */
+/** One design-guide row: 4rem at the 1rem = 10px baseline. */
+const SCROLL_STEP_PX = 40;
+
+/**
+ * Scrolls the view's content region. On a device there is no touch and no wheel,
+ * and the key handler consumes the arrow keys, so nothing else will ever scroll a
+ * page that has no highlight to move — the rest of the content would simply be
+ * unreachable. `.kai-content` is the layout contract documented in
+ * `src/styles/kaios.css`.
+ */
+function scrollContent(delta) {
+  const scroller = document.querySelector('.kai-content');
+  if (!scroller) return;
+  scroller.scrollTop += delta * SCROLL_STEP_PX;
+}
+
+/**
+ * Moves the highlight by `delta`, wrapping at the ends of the list
+ * (design-guide: list views loop). With fewer than two selectable elements there
+ * is nothing to move between, so the press scrolls the view instead.
+ */
 export function move(delta) {
   const list = ordered();
-  if (!list.length) return;
+
+  if (list.length < 2) {
+    scrollContent(delta);
+    return;
+  }
 
   let index = list.findIndex((entry) => entry.uid === nav.current);
   index = index === -1 ? 0 : (index + delta + list.length) % list.length;

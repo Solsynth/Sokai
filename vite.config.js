@@ -4,13 +4,19 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 
 import { kaiosLegacy } from './scripts/vite-plugin-kaios-legacy.js';
-import { kaiosManifest } from './scripts/vite-plugin-kaios-manifest.js';
+import { kaiosHtml } from './scripts/vite-plugin-kaios-html.js';
 import { KAIOS_ESBUILD_TARGET, TARGET_LABEL } from './scripts/target.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
-  plugins: [vue(), kaiosLegacy(), kaiosManifest()],
+  plugins: [vue(), kaiosLegacy(), kaiosHtml()],
+
+  // Relative asset URLs. On a device the app is served from its own origin root,
+  // so `./js/app.js` resolves exactly like `/js/app.js`; off-device it means the
+  // built package can be opened directly (file://) or served from a subdirectory
+  // instead of 404-ing on root-absolute paths and showing a blank page.
+  base: './',
 
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),

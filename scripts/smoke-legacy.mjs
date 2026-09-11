@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 /**
- * Runtime gate: executes the shipped bundle in a realm that has had every
- * post-ES2015 global removed, then drives it with KaiOS hardware key events.
+ * Runtime gate: loads the built page the way a browser loads it — external
+ * scripts fetched and executed in document order — then drives it with KaiOS
+ * hardware key events.
  *
  * Why this exists on top of `verify-legacy.mjs`: static analysis can prove the
  * bundle *parses*, but not that the app *runs*. The polyfills that make Gecko 48
- * work are injected at build time by usage detection, so the only honest check
- * is to take those APIs away and see whether the app still starts, navigates and
+ * work are injected at build time by usage detection, so the only honest check is
+ * to take those APIs away and see whether the app still starts, navigates and
  * completes a privileged request.
  *
- * The realm still provides jsdom's DOM, which is newer than Gecko 48's — this
+ * What this gate cannot do: jsdom fetches external scripts asynchronously, so a
+ * script that a browser would run *during* parsing effectively runs after it
+ * here. Execution *timing* is therefore enforced statically, by the `<head>`
+ * `defer` rule in `verify-legacy.mjs` — this harness only asserts what happens
+ * once the app is running.
+ *
+ * The realm still provides jsdom's DOM, which is newer than Gecko 48's: this
  * covers JavaScript built-ins and app behaviour, not DOM API age.
  */
 
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { JSDOM } from 'jsdom';
 
@@ -30,8 +39,10 @@ function check(label, condition, observed) {
 
 const navState = (nodes) => nodes.map((node) => node.getAttribute('nav-selected'));
 
-/** Removes built-ins that Firefox 48 does not have, in the window's own realm. */
-const STRIP_MODERN_APIS = `(function () {
+/** Runs before any other script in the page (see the stub note above). */
+const PREAMBLE = `<script>
+(function () {
+  /* Firefox 48 does not have these. */
   var proto = Array.prototype;
   delete proto.flat; delete proto.flatMap; delete proto.at;
   delete proto.findLast; delete proto.findLastIndex;
@@ -57,52 +68,70 @@ const STRIP_MODERN_APIS = `(function () {
   delete window.ResizeObserver;
   delete window.IntersectionObserver;
   delete window.globalThis;
-})();`;
 
-const dom = new JSDOM(readFileSync('dist/index.html', 'utf8'), {
-  runScripts: 'outside-only',
+  /* Deterministic stand-in for public/js/libs/l10n.js: get() echoes the id, so
+     assertions also prove strings flow through the l10n layer. once() is
+     synchronous, which turns the real page's mount race into a hard failure. */
+  window.navigator.mozL10n = {
+    get: function (id) { return id; },
+    once: function (callback) { callback(); }
+  };
+
+  /* Stands in for XMLHttpRequest so the privileged path can be inspected. */
+  window.__requests = [];
+  window.XMLHttpRequest = function (options) {
+    this.options = options;
+    this.responseType = '';
+    this.timeout = 0;
+    this.status = 0;
+  };
+  window.XMLHttpRequest.prototype.open = function (method, url) {
+    this.method = method;
+    this.url = url;
+  };
+  window.XMLHttpRequest.prototype.send = function () {
+    window.__requests.push(this);
+  };
+  window.XMLHttpRequest.prototype.respond = function (status, body) {
+    this.status = status;
+    this.response = body;
+    this.onload();
+  };
+})();
+</script>`;
+
+const DIST = path.resolve('dist');
+const distUrl = pathToFileURL(DIST + path.sep).href;
+
+// The package uses root-absolute URLs, which is correct on a device (the app is
+// served from its origin root) but means nothing to a file path. Rebase them
+// onto dist/ so the loader can fetch them; the tag order and attributes — the
+// things under test — are untouched.
+const html = readFileSync(path.join(DIST, 'index.html'), 'utf8')
+  .replace(/(src|href)="\//g, `$1="${distUrl}`)
+  .replace(/<script\b[^>]*\bsrc="[^"]*l10n\.js"[^>]*><\/script>/, PREAMBLE);
+
+if (!html.includes('XMLHttpRequest = function (options)')) {
+  console.error('Harness error: could not find the l10n script tag to replace with the stub.');
+  process.exit(1);
+}
+
+const dom = new JSDOM(html, {
+  runScripts: 'dangerously',
+  resources: 'usable',
   pretendToBeVisual: true,
-  url: 'http://localhost/',
+  url: `${distUrl}index.html`,
 });
 
 const { window } = dom;
 const { document } = window;
 
-window.eval(STRIP_MODERN_APIS);
-
-// Layer that `public/js/libs/l10n.js` provides on a real KaiOS device. `get`
-// echoes the id, so assertions double as a check that strings flow through it.
-window.navigator.mozL10n = {
-  get: (id) => id,
-  once: (callback) => callback(),
-};
-
-/** Stands in for XMLHttpRequest so the privileged path can be inspected. */
-const requests = [];
-class FakeXHR {
-  constructor(options) {
-    this.options = options;
-    this.responseType = '';
-    this.timeout = 0;
-    this.status = 0;
-  }
-
-  open(method, url) {
-    this.method = method;
-    this.url = url;
-  }
-
-  send() {
-    requests.push(this);
-  }
-
-  respond(status, body) {
-    this.status = status;
-    this.response = body;
-    this.onload();
-  }
+if (document.readyState !== 'complete') {
+  await new Promise((resolve) => window.addEventListener('load', resolve, { once: true }));
 }
-window.XMLHttpRequest = FakeXHR;
+await new Promise((resolve) => setTimeout(resolve, 50));
+
+const requests = window.__requests;
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const all = (selector) => Array.prototype.slice.call(document.querySelectorAll(selector));
@@ -122,9 +151,6 @@ async function press(key) {
   await flush();
   return event;
 }
-
-window.eval(readFileSync('dist/js/app.js', 'utf8'));
-await flush();
 
 /* --- Boot ---------------------------------------------------------------- */
 

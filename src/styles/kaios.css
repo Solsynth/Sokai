@@ -67,18 +67,39 @@ body {
 }
 
 body {
+  /* Flex column, not `height: 100%` chains: the app root has to stretch, and a
+     percentage height silently resolves against `auto` if any wrapper between
+     body and the app lacks one. */
+  display: flex;
+  flex-direction: column;
   background: var(--kai-color-bg);
   color: var(--kai-color-text);
   font-family: var(--kai-font-family);
   font-size: var(--kai-fs-p-pri);
-  /* The app owns the viewport; the platform never scrolls the document. */
+  /* The app owns the viewport; only `.kai-content` scrolls. */
   overflow: hidden;
+}
+
+/*
+ * The mount point is part of the layout contract.
+ *
+ * With no rule here, `#app` is `height: auto`, `.kai-app` sizes to its content,
+ * and two things break at once: the softkey bar stops being pinned to the bottom
+ * (it sits under the content) and `.kai-content` never gets a bounded height, so
+ * its `overflow-y: auto` clips long pages instead of scrolling them.
+ */
+#app {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .kai-app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* A screen = header + scrolling content + softkey bar. */
@@ -89,6 +110,12 @@ body {
   min-height: 0;
 }
 
+/*
+ * The view's scroll region. `src/kaios/nav.js` drives this element with the
+ * D-pad when a screen has nothing selectable (or only one selectable) and the
+ * content is taller than the screen: arrow keys are consumed by the key handler,
+ * so the browser's own scrolling never gets a chance. Keep the class name stable.
+ */
 .kai-content {
   flex: 1 1 auto;
   min-height: 0;

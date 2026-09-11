@@ -14,8 +14,22 @@ npm run verify     # static + runtime checks against Gecko 48
 npm run package:kaios   # build + verify + build/sokai-<version>.zip
 ```
 
-Deploy by loading `dist/` (or the zip) through KaiOS WebIDE, or by copying `dist/` to a
-device. Store submission additionally requires the package to be signed by KaiOS.
+Deploy by pointing KaiOS WebIDE (or the simulator) at **`dist/`** — never at the project root.
+Only `dist/` is an installable package: `manifest.webapp` lives in `public/`, so the repository
+root has no manifest and WebIDE will refuse it instead of quietly packaging `node_modules` and
+loading `index.html`, which is the Vite *source* page and does not run on Gecko 48 (that shows up
+as an empty `#app` with no error anywhere). `npm run verify` fails if a manifest ever reappears at
+the root.
+
+For a single artefact, `npm run package:kaios` produces `build/sokai-<version>.zip` with
+`manifest.webapp` at the archive root; that is what store submission consumes. Signing is done by
+KaiOS, so sideload an unsigned `dist/` through WebIDE.
+
+To run the **built** package locally, serve it — `npm run preview` (or any static server rooted
+at `dist/`). Opening `dist/index.html` straight off the filesystem also works now that assets
+use relative URLs, but browsers block the `file://` request that loads
+`public/data/*.properties`, so every string renders as its message id instead of translated
+text. Use the preview server when localisation matters.
 
 ## The KaiOS constraint
 
@@ -63,6 +77,7 @@ Two gates, because they catch different things.
 | --- | --- |
 | Whole bundle parses as `ecmaVersion: 6` `sourceType: script` | FF48 has ES2015 and nothing newer: no async/await, no object spread, no `?.`/`??`, no `**`, no optional catch binding |
 | No `type="module"`, `crossorigin`, `modulepreload` in `index.html` | Gecko 48 has no ES module support and silently ignores such scripts |
+| Every `<script src>` in `<head>` has `defer` | A classic script in the head runs before `<div id="app">` is parsed, so the app cannot mount — a blank page with an empty `#app`. Removing `type="module"` removed the deferred execution modules get for free |
 | No inline `<script>` | Privileged apps run under a CSP that forbids it |
 | No `new Function(...)` / bare `eval(...)` | Same CSP, no `unsafe-eval` |
 | CSS denylist | CSS Grid (FF52) and flex `gap` (FF63) do not degrade, they collapse layout; also `:is()`, `min()`/`max()`, `:focus-within`, `aspect-ratio`, `dvh`, … |
@@ -119,8 +134,7 @@ a browser would refuse.
 ## Layout
 
 ```
-index.html                 Vite entry; loads the platform l10n script
-manifest.webapp            copied into the bundle by scripts/vite-plugin-kaios-manifest.js
+index.html                 Vite entry (source only — not a runnable page)
 src/
   main.js                  entry: key handler, l10n, mount
   App.vue                  screen stack + softkey bar
@@ -128,8 +142,10 @@ src/
   components/              KaiOS UI components
   views/                   Home, Search, About
   styles/kaios.css         design tokens + primitives
-public/                    copied verbatim: l10n data, l10n.js, manifest icons
+public/                    copied verbatim into dist/: manifest.webapp, l10n data,
+                           l10n.js, manifest icons
 scripts/                   target, Babel config, Vite plugins, both gates, packager
+dist/                      the only installable app package (build output)
 ```
 
 ## Trade-offs worth knowing

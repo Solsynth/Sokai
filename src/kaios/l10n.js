@@ -25,13 +25,16 @@ export function t(id, args) {
   void l10nState.version;
 
   const l10n = navigator.mozL10n;
+  let value = null;
   if (l10n && typeof l10n.get === 'function') {
-    return l10n.get(id, args);
+    value = l10n.get(id, args);
   }
 
-  // No l10n library (desktop dev server, tests): showing the id keeps missing
-  // translations visible instead of silently rendering an empty string.
-  return id;
+  // `mozL10n.get` returns an empty string when the locale data could not be
+  // loaded — for example when the built package is opened over `file://`, where
+  // the browser blocks the XHR that fetches the .properties files. Showing the
+  // id keeps missing translations visible instead of rendering blank chrome.
+  return value === undefined || value === null || value === '' ? id : value;
 }
 
 /**

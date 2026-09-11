@@ -235,7 +235,96 @@ Two lessons about the gate itself:
   `Access-Control-Allow-Origin`, so a fetch-based client could not reach it from a page even
   inside the privileged app.
 
-## 8. Smaller findings
+## 8. The blank page: what removing `type="module"` also removes
+
+There were two independent causes of "built app loads, `#app` stays empty". The first one is about
+*which folder is the app*; the second is about *when the script runs*.
+
+### 8.1 The project root is not an app (the one that actually bit)
+
+`manifest.webapp` originally sat at the repository root, which made the **project folder** look
+like a valid KaiOS app to WebIDE and the simulator. Pointing either of them at it produced:
+
+- a package containing the entire project — `node_modules/`, `src/`, `scripts/`, and a nested
+  `dist/` — because the tool packages the folder it is given;
+- and, as the app's page, the root `index.html`, which is the **Vite source entry**:
+
+  ```html
+  <script type="module" src="/src/main.js"></script>
+  ```
+
+Gecko 48 does not execute `type="module"` scripts at all, and `/src/main.js` does not exist in a
+package anyway, so *no application code ever runs*. The HTML parses, `#app` exists, and nothing
+fills it. Nothing errors, because nothing is executed.
+
+The fix is structural rather than cosmetic: `manifest.webapp` moved to `public/manifest.webapp`
+(Vite copies `public/` verbatim), so **only `dist/` is an installable package**. WebIDE pointed at
+the project root now fails with "no manifest" instead of silently shipping `node_modules` and a
+dead page. `npm run verify` fails if a root manifest ever comes back:
+
+```
+[layout] manifest.webapp exists at the repo root: WebIDE would package the whole project
+and load the unusable source index.html instead of dist/
+```
+
+Rule of thumb: **build, then point the tool at `dist/`.**
+
+### 8.2 `<script>` timing — the same symptom, a different cause
+
+Vite injects the entry script into `<head>` as `type="module"`. Module scripts are deferred by
+specification, which is why the dev server was always fine. The production HTML transform strips
+`type="module"` — that is the whole point of it — and in doing so turned the tag into a classic
+script that executes **while the head is still being parsed**:
+
+```html
+<script src="./js/app.js"></script>   <!-- runs before <div id="app"> is parsed -->
+```
+
+`createApp(App).mount('#app')` then has no target. It does not always look the same, because the
+mount does not happen at that instant: it sits behind `initL10n()`, which resolves from a timer
+or an event. So the app either throws a mount error or *wins a race against the parser* — and a
+200 kB parse on a 1.1 GHz phone loses that race far more often than a laptop does. Intermittent
+blank pages, and a bundle that works when you test it locally and not on the handset.
+
+**Fix, in one line:**
+
+```html
+<script src="./js/app.js" defer></script>
+```
+
+`defer` restores exactly the semantics `type="module"` had provided: fetch in parallel, execute
+after parsing, in document order. `async` is not an alternative — it fires on arrival, which is
+the original problem.
+
+**Why both gates missed it.**
+
+- The runtime gate `eval`'d the bundle *after* constructing the full DOM from the HTML, so
+  `#app` always existed. It modelled the bundle, never the page's execution order.
+- The static gate asserted `type="module"` was *absent*. It never asked *when* the script runs.
+- Loading the page faithfully in jsdom is not enough either: **jsdom fetches external scripts
+  asynchronously, so a script a browser would run during parsing effectively runs after it.**
+  Execution *timing* cannot be caught dynamically here at all; it has to be a static rule.
+
+That rule now lives in `verify-legacy.mjs` and fires deterministically on the broken build:
+
+```
+[html] <script src="./js/app.js"> is in <head> without defer — it runs before #app exists, so the app cannot mount
+[html] <script src="./js/libs/l10n.js"> is in <head> without defer — it runs before #app exists, so the app cannot mount
+```
+
+The second line is not noise: the platform l10n script has the same constraint, since the app
+must find `navigator.mozL10n` already installed.
+
+**Related: root-absolute asset URLs.** The same blank page appears for a second, unrelated
+reason if `dist/index.html` is opened over `file://` or served from a subdirectory: `/js/app.js`
+resolves to the filesystem root or the server root and 404s. `base: './'` in `vite.config.js`
+removes that. On a device nothing changes — the app is served from its own origin root, so
+`./js/app.js` and `/js/app.js` are the same URL — but off-device the package can now be opened
+directly. Note that over `file://` the browser blocks the XHR that loads
+`data/*.properties`, so strings render as message ids rather than text; use `npm run preview`
+for a fully correct local run.
+
+## 9. Smaller findings
 
 - **Babel 8 removed `bugfixes`** (always on) and **removed `useBuiltIns`** from
   `@babel/preset-env`; the supported replacement is `babel-plugin-polyfill-corejs3`. Errors are
@@ -252,8 +341,12 @@ Two lessons about the gate itself:
 - **`zip` alone cannot express the packaging rules.** `scripts/package-kaios.mjs` always
   re-checks that `manifest.webapp` is at the archive root, because a wrapping folder makes the
   package silently unrecognisable to the device.
+- **`mozL10n.get()` returns an empty string, not the id, when the locale data could not load.**
+  That is how the `file://` case showed up as chrome with blank labels rather than an obvious
+  failure. `t()` in `src/kaios/l10n.js` now falls back to the id for `undefined`, `null` and
+  `''`, so a missing or unloadable translation is visible instead of invisible.
 
-## 9. If you change the pipeline
+## 10. If you change the pipeline
 
 1. Nothing may be excluded from the syntax pass. core-js is excluded from the *injection* pass
    only, and for ordering reasons.
@@ -262,5 +355,13 @@ Two lessons about the gate itself:
    finishes last.
 3. Adding a target spelling? Put it in `scripts/target.js`. A tool that does not recognise the
    target you gave it may not tell you.
-4. `npm run verify` after any change to Vite, Babel, core-js, or Vue versions. Both gates, not
-   just the build.
+4. **Every `<script src>` that ends up in `<head>` must be `defer`.** Vite emits the entry as
+   `type="module"` (deferred by spec); the transform that strips the attribute must put the
+   deferral back. If a page renders empty, check this before anything else — it is invisible
+   until it is a race.
+5. Nothing but a browser models execution timing. jsdom resolves external scripts
+   asynchronously, so guards for "runs too early" have to be static rules in
+   `verify-legacy.mjs`, not assertions in the runtime gate.
+6. `npm run verify` after any change to Vite, Babel, core-js, or Vue versions. Both gates, not
+   just the build. And when a check passes, ask what it would take for it to fail — the blank
+   page passed both gates.
