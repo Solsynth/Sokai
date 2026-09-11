@@ -47,8 +47,11 @@ html {
   --kai-color-border: #cbcbcb;
   --kai-color-on-accent: #ffffff;
 
-  /* Brand accent. Single knob: change this one value for a re-theme. */
-  --kai-color-accent: #9b27af;
+  /* Brand accent. Single knob: change this one value for a re-theme.
+     `#7577ba` carries white ink at 4.1:1 (WCAG AA wants 4.5 for body text) and
+     itself reads at 3.8:1 against `--kai-color-surface` — see the palette note
+     in the README before changing either. */
+  --kai-color-accent: #7577ba;
 
   --kai-radius: 0.6rem;
   --kai-gutter: 1rem;

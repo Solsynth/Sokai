@@ -116,7 +116,13 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Chrome** — header (36px, uppercase) and softkey bar (30px, `SoftLeft`/`Enter`/`SoftRight`
   with the centre key larger) follow the KaiOS team's own sample app, which is also the source
   of the palette: the public guide documents no colour spec, so `--kai-color-accent` is the one
-  knob to re-theme.
+  knob to re-theme. It is `#7577ba`, and the manifest's `theme_color` hands the same value to
+  the Launcher.
+- **Accent contrast** — white ink on `#7577ba` measures 4.1:1, and `#7577ba` used as *text* on
+  `--kai-color-surface` measures 3.8:1; WCAG AA asks 4.5:1 for body text, so those are the two
+  pairs to re-measure on a re-theme (accent-coloured text is the markdown link, the `[image]`
+  marker and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
+  and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiProgress`,
   `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
   kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option
