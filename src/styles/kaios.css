@@ -131,6 +131,35 @@ body {
   outline: none;
 }
 
+/* A screen that wants its content to breathe below the header: the post detail,
+   where the attachments start immediately. */
+.kai-content--roomy {
+  padding-top: 1.2rem;
+}
+
+/* --- Dashboard ------------------------------------------------------ */
+
+.kai-clock {
+  display: flex;
+  align-items: baseline;
+  margin: 0 0 1.2rem;
+  padding: 0.6rem var(--kai-gutter);
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-surface);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+}
+
+.kai-clock__time {
+  font-size: var(--kai-fs-h1);
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-clock__date {
+  margin-left: 0.8rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
 /* --- Header --------------------------------------------------------- */
 
 .kai-header {
@@ -448,6 +477,25 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
 
 .kai-post__attach-kind {
   color: var(--kai-color-accent);
+}
+
+/*
+ * The detail screen's attachments live above the post card, flush against it.
+ * With a picture in the block the four touching corners are squared off so the
+ * two read as one column instead of two shapes that happen to meet.
+ */
+.kai-post-extras {
+  margin-bottom: 0;
+}
+
+.kai-post-extras--media .kai-attachment__image:last-of-type {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.kai-post-extras--media + .kai-post {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /*

@@ -2,7 +2,20 @@
   <div class="kai-view">
     <KaiHeader :title="t('post_title')" />
 
-    <main class="kai-content">
+    <main class="kai-content kai-content--roomy">
+      <!--
+        Attachments sit outside the card and flush against its top edge: the
+        picture is the post, the card is what it says. They are also outside the
+        selectable body, so the D-pad scrolls the text, not the picture.
+      -->
+      <div
+        v-if="post && post.attachments.length"
+        class="kai-post-extras"
+        :class="{ 'kai-post-extras--media': hasPicture }"
+      >
+        <KaiAttachmentList :attachments="post.attachments" />
+      </div>
+
       <!--
         The body container is always rendered, so it is registered as the first
         selectable entry on mount (see `onMounted`): focus starts at the top of
@@ -31,8 +44,6 @@
           <p v-if="post.title" class="kai-post__title">{{ post.title }}</p>
 
           <div class="kai-md" v-html="rendered"></div>
-
-          <KaiAttachmentList :attachments="post.attachments" />
 
           <span class="kai-post__author">{{ post.author.display }}</span>
 
@@ -170,6 +181,11 @@ const time = computed(() => {
 const visibility = computed(() => (post.value ? visibilityKey(post.value.visibility) : null));
 
 const kind = computed(() => (post.value ? postKindKey(post.value.kind) : null));
+
+/** The seam with the card below is only squared off when there is a picture there. */
+const hasPicture = computed(() =>
+  post.value ? post.value.attachments.some((attachment) => attachment.kind === 'image') : false,
+);
 
 const quote = computed(() =>
   post.value ? post.value.forwardedFrom || post.value.repliedTo : null,

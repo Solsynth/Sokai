@@ -331,6 +331,24 @@ async function press(key) {
   return event;
 }
 
+/* --- Dashboard ------------------------------------------------------------ */
+
+check('the app opens on the dashboard', text('.kai-header__title') === 'app_title', text('.kai-header__title'));
+check(
+  'the dashboard lists the top-level screens',
+  texts('.kai-list-item__primary').join('|') === 'nav_explore|nav_about' &&
+    texts('.kai-list-item__secondary').join('|') === 'nav_explore_desc|nav_about_desc',
+  { primary: texts('.kai-list-item__primary'), secondary: texts('.kai-list-item__secondary') },
+);
+check(
+  'the dashboard clock shows a time and a date',
+  /^\d{2}:\d{2}:\d{2}$/.test(text('.kai-clock__time')) && /^\d{4}-\d{2}-\d{2}$/.test(text('.kai-clock__date')),
+  { time: text('.kai-clock__time'), date: text('.kai-clock__date') },
+);
+check('the dashboard asks the network for nothing', requests.length === 0, requests.length);
+
+await press('Enter');
+
 /* --- Explore -------------------------------------------------------------- */
 
 await until(() => document.querySelectorAll('li.kai-post').length > 0);
@@ -476,7 +494,11 @@ await press('ArrowUp');
 check('UP at the top wraps to the end', rows[1].getAttribute('nav-selected') === 'true', navState(rows));
 
 check('softkey shows the centre action', text('.kai-softkey__key--center') === 'action_open', text('.kai-softkey__key--center'));
-check('softkey offers About', text('.kai-softkey__key--right') === 'action_about', text('.kai-softkey__key--right'));
+check(
+  'Explore offers Back, and About is a dashboard entry instead of a softkey',
+  text('.kai-softkey__key--left') === 'action_back' && text('.kai-softkey__key--right') === '',
+  { left: text('.kai-softkey__key--left'), right: text('.kai-softkey__key--right') },
+);
 
 /* --- Post detail -------------------------------------------------------- */
 
@@ -540,10 +562,22 @@ check(
   tight(text('.kai-md--quote')),
 );
 check(
+  'attachments sit above the card, not inside it',
+  all('.kai-post-extras .kai-post__attach').length === 1 &&
+    all('.kai-content > div.kai-post .kai-post__attach').length === 0 &&
+    all('.kai-post-extras .kai-attachment__image').length === 0 &&
+    (document.querySelector('.kai-content').firstElementChild || {}).className === 'kai-post-extras',
+  {
+    extras: texts('.kai-post-extras .kai-post__attach').map(tight),
+    insideCard: all('.kai-content > div.kai-post .kai-post__attach').length,
+    firstChild: (document.querySelector('.kai-content').firstElementChild || {}).className,
+  },
+);
+check(
   'the detail lists every attachment',
-  texts('.kai-content > div.kai-post .kai-post__attach').map(tight).join(' | ') ===
+  texts('.kai-post-extras .kai-post__attach').map(tight).join(' | ') ===
     '[post_attach_file] notes.pdf · 1.5 KB',
-  texts('.kai-content > div.kai-post .kai-post__attach').map(tight),
+  texts('.kai-post-extras .kai-post__attach').map(tight),
 );
 check(
   'an inline file image is rendered, and a foreign one is not fetched',
@@ -568,8 +602,8 @@ check(
 );
 check(
   'a document attachment is a line, not a picture',
-  all('.kai-content > div.kai-post .kai-attachment__image').length === 0,
-  all('.kai-content > div.kai-post .kai-attachment__image').length,
+  all('.kai-post-extras .kai-attachment__image').length === 0,
+  all('.kai-post-extras .kai-attachment__image').length,
 );
 
 const replyRows = all('li.kai-post');
@@ -599,15 +633,34 @@ check(
   { title: text('.kai-header__title'), rows: all('li.kai-post').length },
 );
 
-await press('SoftRight');
+// Explore is no longer the top level: its Back goes up to the dashboard, and the
+// dashboard is where the platform takes Back.
+await press('SoftLeft');
+await until(() => document.querySelectorAll('.kai-list-item').length === 2);
+check(
+  'Back returns to the dashboard',
+  text('.kai-header__title') === 'app_title' && all('.kai-list-item').length === 2,
+  { title: text('.kai-header__title'), entries: all('.kai-list-item').length },
+);
+
+await press('ArrowDown');
+check(
+  'DOWN reaches the second dashboard entry',
+  all('.kai-list-item')[1].getAttribute('nav-selected') === 'true',
+  navState(all('.kai-list-item')),
+);
+
+await press('Enter');
+await until(() => text('.kai-header__title') === 'nav_about');
 const about = text('.kai-content');
-check('About opens from Explore', text('.kai-header__title') === 'nav_about', text('.kai-header__title'));
+check('About opens from the dashboard', text('.kai-header__title') === 'nav_about', text('.kai-header__title'));
 // Guards the build-time `define` values: unreplaced, these render as nothing
 // and the screen is silently blank.
 check('About shows the compiled version', about.includes('0.2.0'), about);
 check('About shows the compiled target', about.includes('KaiOS 2.5 (Gecko 48)'), about);
 
 await press('SoftLeft');
+await until(() => document.querySelectorAll('.kai-list-item').length === 2);
 
 const backEvent = await press('Backspace');
 check('Back at the top level is left to the platform', backEvent.defaultPrevented === false);

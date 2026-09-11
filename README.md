@@ -6,12 +6,13 @@ Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 
 ## What it does
 
-The post read path: an Explore screen listing public Solar Network posts from `api.solian.app`, a
-detail screen that renders a post's body as markdown, and the replies underneath it. D-pad and
-softkeys only.
+The app opens on a **dashboard** — a clock card and one card per top-level screen, currently
+Explore and About, with room for the log-in and notification entries that come next. Explore lists
+public Solar Network posts from `api.solian.app`, with pictures; opening one shows its body as
+markdown, its attachments above the card, and its replies underneath. D-pad and softkeys only.
 
 Every read route is anonymous — no `Authorization` header — and the server limits anonymous
-responses to published, non-draft, public posts. Composing, reactions and images are not
+responses to published, non-draft, public posts. Composing, reactions and video playback are not
 implemented yet; nothing in this increment writes to the API.
 
 ## Quick start
@@ -96,13 +97,14 @@ Two gates, because they catch different things.
 `scripts/smoke-legacy.mjs` — runtime. It boots the **shipped bundle** inside a jsdom realm with
 every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`,
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
-key events against canned copies of the Solar Network responses: the post-list request itself
-(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), D-pad movement and
-list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to open a post whose
-body must render as markdown rather than as escaped text (with its quoted parent rendered as
-markdown too, and only Solar Network file images fetched), the replies that arrive with it, the
-status-bar inset rule, and `Back` at the top level falling through to the platform. 47 assertions.
-This is the check that proves the polyfills are actually present rather than merely configured.
+key events against canned copies of the Solar Network responses: the dashboard's entries and clock,
+the post-list request (privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed),
+D-pad movement and list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to
+open a post whose body must render as markdown rather than as escaped text (with its quoted parent
+rendered as markdown too, its attachments above the card, and only Solar Network file images
+fetched), the replies that arrive with it, the status-bar inset rule, and `Back` at the top level
+falling through to the platform. 54 assertions. This is the check that proves the polyfills are
+actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
 JavaScript and app behaviour, not DOM API age. Confirm on a handset before a store release.
@@ -123,6 +125,16 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   pairs to re-measure on a re-theme (accent-coloured text is the markdown link, the `[image]`
   marker and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
   and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1.
+- **Dashboard** — the root screen, after the reference client's dashboard: a clock card (nothing
+  from the network, so the screen is alive before the first request resolves) and one card per
+  top-level screen, each with a title and a one-line description. It is the extension point — a
+  new screen is a row in `DashboardView.vue`'s `ENTRIES` plus a view in `App.vue`'s map — and it
+  makes no requests of its own. Back at the root is not consumed, so the platform takes it and
+  leaves the app.
+- **Post detail** — attachments live outside the post card, flush against its top edge; when the
+  block holds a picture the touching corners are squared off so the two read as one column.
+  `kai-content--roomy` adds the 12px of breathing room below the header that the card would
+  otherwise lose to it.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiProgress`,
   `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
   kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option
@@ -199,7 +211,7 @@ src/
   content/markdown.js      post bodies: markdown in the detail, plain text in a row
   kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR, status bar
   components/              KaiOS UI components
-  views/                   Explore, Post, About
+  views/                   Dashboard, Explore, Post, About
   styles/kaios.css         design tokens + primitives
 public/                    copied verbatim into dist/: manifest.webapp, l10n data,
                            l10n.js, manifest icons

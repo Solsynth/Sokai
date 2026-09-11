@@ -35,7 +35,7 @@ import KaiPostRow from '../components/KaiPostRow.vue';
 import KaiProgress from '../components/KaiProgress.vue';
 import { t } from '../kaios/l10n.js';
 import { setBaseSoftkeys } from '../kaios/nav.js';
-import { push } from '../kaios/views.js';
+import { pop, push } from '../kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Explore takes none.
 defineProps({
@@ -79,9 +79,10 @@ function retry() {
 
 onMounted(() => {
   setBaseSoftkeys(() => ({
+    // Explore is reached from the dashboard, so Back is the way up; About is a
+    // dashboard entry now, not a softkey here.
+    left: { label: t('action_back'), onPress: pop },
     center: { label: t('action_open') },
-    // The feed is the top level, so About lives on the right softkey.
-    right: { label: t('action_about'), onPress: () => push('about') },
   }));
 
   load(0);

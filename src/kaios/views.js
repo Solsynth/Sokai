@@ -9,7 +9,7 @@ import { computed, ref } from 'vue';
  * `{ name: 'post', params: { id } }` twice keeps two entries of the same view,
  * and Back returns to the one underneath.
  */
-export const stack = ref([{ name: 'explore', params: {} }]);
+export const stack = ref([{ name: 'dashboard', params: {} }]);
 
 export const currentView = computed(() => stack.value[stack.value.length - 1]);
 
