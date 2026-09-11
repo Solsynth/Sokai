@@ -24,12 +24,12 @@ import { t } from '../kaios/l10n.js';
 
 /**
  * Page flip controls for an offset-paginated list, rendered above the feed.
- * The total page count sits in a wide cell on top; the previous and next cells
- * are boxed side by side underneath — left is previous, right is next. Both
- * cells are ordinary selectable rows, so the D-pad reaches them from the posts
- * (UP from the first post, or the list loop wrapping around the end). The posts
- * mark themselves `initial`, so the highlight does not land on the controls
- * when the screen mounts.
+ * The total page count is a centred label on top; the previous and next cells
+ * are edge-to-edge rows underneath — no boxes, so the focused row is the plain
+ * accent highlight. Both cells are ordinary selectable rows, so the D-pad
+ * reaches them from the posts (UP from the first post, or the list loop
+ * wrapping around the end). The posts mark themselves `initial`, so the
+ * highlight does not land on the controls when the screen mounts.
  */
 defineProps({
   /** 1-based. */

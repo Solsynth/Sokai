@@ -378,48 +378,40 @@ body {
 
 /* --- Pager ----------------------------------------------------------- */
 
-/* Three boxed cells: the total page count in a wide cell on top, then the
-   previous and next page cells side by side. The cells use the plain list
-   (not `kai-list--flat`) so their boxes are their own, not hairlines. */
+/* The total page count is a centred label; the prev/next cells are edge-to-edge
+   rows with no boxes, so the focused row is the plain accent highlight and its
+   label stays readable (the boxed cells' own background used to win the cascade
+   over the selected state, leaving light text on a light cell). */
 .kai-pager {
-  margin: 0 0 0.8rem;
+  margin: 0.8rem 0 0;
 }
 
 .kai-pager__status {
-  margin: 0 0 0.8rem;
-  padding: 1rem;
-  /* Longhands: the shorthand with a `var()` colour is computed as borderless
-     by jsdom, and this boxed look is one of the things the runtime gate pins. */
-  border-width: 0.1rem;
-  border-style: solid;
-  border-color: var(--kai-color-border);
-  border-radius: var(--kai-radius);
-  background: var(--kai-color-surface);
+  margin: 0;
+  padding: 0.6rem 0;
+  /* Explicitly borderless: without a declaration jsdom computes the width as
+     its 16px default, and this label is pinned borderless by the runtime gate. */
+  border: 0;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-thi);
   text-align: center;
 }
 
 .kai-pager__nav {
-  display: flex;
   margin: 0;
 }
 
 .kai-pager__nav .kai-list-item {
-  flex: 1;
-  margin: 0 0 0.9rem;
-  padding: 0.6rem 0.4rem;
-  border-width: 0.1rem;
-  border-style: solid;
-  border-color: var(--kai-color-border);
-  border-radius: var(--kai-radius);
+  margin: 0 calc(-1 * var(--kai-gutter));
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
-  background: var(--kai-color-surface);
-  text-align: center;
+  background: transparent;
 }
 
-.kai-pager__nav .kai-list-item + .kai-list-item {
-  margin-left: 0.8rem;
+.kai-pager__nav .kai-list-item[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
 }
 
 /* --- Text ----------------------------------------------------------- */

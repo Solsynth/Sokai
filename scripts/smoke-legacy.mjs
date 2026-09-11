@@ -621,7 +621,7 @@ check(
   { pager: texts('.kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
 );
 check(
-  'the pager is a count cell above the page cells',
+  'the pager is a count label above the page rows',
   (() => {
     const pager = document.querySelector('.kai-pager');
     const status = document.querySelector('.kai-pager__status');
@@ -633,9 +633,9 @@ check(
       status.parentElement === pager &&
       nav.parentElement === pager &&
       status.nextElementSibling === nav &&
-      statusStyle.borderTopWidth === '1px' &&
+      statusStyle.borderTopWidth === '0px' &&
       statusStyle.textAlign === 'center' &&
-      navStyle.display === 'flex'
+      navStyle.display !== 'flex'
     );
   })(),
   (() => {
@@ -685,20 +685,28 @@ check(
   texts('.kai-list-item__primary'),
 );
 check(
-  'the two page cells sit side by side, previous then next',
+  'the two page cells stack edge to edge, previous then next, without boxes',
   (() => {
     const cells = document.querySelectorAll('.kai-pager__nav .kai-list-item');
+    if (cells.length !== 2) return false;
+    const first = window.getComputedStyle(cells[0]);
+    const second = window.getComputedStyle(cells[1]);
     return (
-      cells.length === 2 &&
       cells[0].textContent.trim() === 'action_prev_page' &&
       cells[1].textContent.trim() === 'action_next_page' &&
-      window.getComputedStyle(cells[0]).marginLeft === '0px' &&
-      window.getComputedStyle(cells[1]).marginLeft === '8px'
+      first.borderTopWidth === '0px' &&
+      second.borderTopWidth === '0px' &&
+      first.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+      second.backgroundColor === 'rgba(0, 0, 0, 0)'
     );
   })(),
   Array.prototype.map.call(
     document.querySelectorAll('.kai-pager__nav .kai-list-item'),
-    (node) => node.textContent.trim(),
+    (node) => ({
+      text: node.textContent.trim(),
+      border: window.getComputedStyle(node).borderTopWidth,
+      background: window.getComputedStyle(node).backgroundColor,
+    }),
   ),
 );
 check(

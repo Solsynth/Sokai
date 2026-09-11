@@ -196,11 +196,12 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
-  than the screen and unreachable. The feed's page-flip controls sit above the posts as three
-  boxed cells — the total page count in a wide cell on top, previous on the left and next on the
-  right — reachable with `Up` from the first post or by wrapping past the last; primary content
-  registers as `initial`, so the highlight starts on the first post rather than on the controls.
-  Selection is tracked in `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
+  than the screen and unreachable. The feed's page-flip controls sit above the posts: the total
+  page count as a centred label, with the previous and next cells as edge-to-edge borderless
+  rows under it, so a focused cell is the plain accent highlight — reachable with `Up` from the
+  first post or by wrapping past the last; primary content registers as `initial`, so the
+  highlight starts on the first post rather than on the controls. Selection is tracked in
+  `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
   compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the
