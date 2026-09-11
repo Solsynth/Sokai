@@ -134,8 +134,13 @@ body {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  height: var(--kai-header-height);
-  padding: 0 var(--kai-gutter);
+  /* The system status bar is drawn over the app on some KaiOS builds; the
+     header grows by that inset so the title clears the bar while its accent
+     background runs underneath it. `--kai-safe-top` is 0 wherever there is no
+     status bar over the app — see src/kaios/screen.js. `min-height` rather than
+     `height` is what lets it grow. */
+  padding: var(--kai-safe-top, 0px) var(--kai-gutter) 0;
+  min-height: calc(var(--kai-safe-top, 0px) + var(--kai-header-height));
   background: var(--kai-color-accent);
 }
 
@@ -373,6 +378,102 @@ li.kai-post[nav-selected="true"] .kai-post__meta {
   font-size: var(--kai-fs-p-pri);
   /* `overflow-wrap` is Firefox 49+; this is its alias. */
   word-wrap: break-word;
+}
+
+.kai-post__handle {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+li.kai-post[nav-selected="true"] .kai-post__handle {
+  color: var(--kai-color-on-accent);
+}
+
+/*
+ * Quoted parent: a reply quotes the post it answers, a forward quotes its
+ * source. Indented behind a left rule, the same shape as the markdown
+ * `blockquote` it mirrors.
+ */
+.kai-post__quote {
+  margin-top: 0.4rem;
+  padding-left: 0.8rem;
+  border-left: 0.3rem solid var(--kai-color-border);
+}
+
+.kai-post__quote-label {
+  margin: 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-post__quote-title {
+  margin: 0.2rem 0 0;
+  font-size: var(--kai-fs-p-sec);
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-post__quote-text {
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+  word-wrap: break-word;
+}
+
+/* The quoted body is rendered markdown in the detail screen; at 1.7rem it would
+   out-shout the post it belongs to. */
+.kai-md--quote {
+  margin-bottom: 0;
+}
+
+.kai-md--quote p,
+.kai-md--quote li {
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-post__attach {
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+  word-wrap: break-word;
+}
+
+.kai-post__quote-attach {
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-post__attach-kind {
+  color: var(--kai-color-accent);
+}
+
+.kai-post__counts {
+  margin-top: 0.2rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-post__counts span {
+  margin-right: 0.6rem;
+}
+
+.kai-post__tags {
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-post__tags .kai-tag {
+  margin-right: 0.6rem;
+}
+
+/* A selected row inverts to the accent background: every muted child has to come
+   with it or it turns into accent-on-accent. */
+li.kai-post[nav-selected="true"] .kai-post__quote-label,
+li.kai-post[nav-selected="true"] .kai-post__quote-text,
+li.kai-post[nav-selected="true"] .kai-post__quote-attach,
+li.kai-post[nav-selected="true"] .kai-post__attach,
+li.kai-post[nav-selected="true"] .kai-post__attach-kind,
+li.kai-post[nav-selected="true"] .kai-post__counts {
+  color: var(--kai-color-on-accent);
 }
 
 .kai-tag {

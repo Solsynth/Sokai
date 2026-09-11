@@ -30,6 +30,48 @@ const HTML_TAG = /<[^>]*>/g;
 const WHITESPACE = /\s+/g;
 const TRAILING_WHITESPACE = /\s+$/;
 
+/** Three lines at the 1.7rem body size on a 240px screen. */
+const DEFAULT_EXCERPT_UNITS = 70;
+
+/** Full-width ranges: CJK, Hangul, kana, and the full-width forms. */
+function isWide(code) {
+  return (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe6f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6)
+  );
+}
+
+function isHighSurrogate(code) {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+/**
+ * @param {string} text
+ * @param {number} budget width units
+ * @returns {string} `text`, or a prefix of it ending in an ellipsis
+ */
+function clipToUnits(text, budget) {
+  let units = 0;
+  let index = 0;
+
+  for (; index < text.length; index += 1) {
+    const width = isWide(text.charCodeAt(index)) ? 2 : 1;
+    if (units + width > budget) break;
+    units += width;
+  }
+
+  if (index >= text.length) return text;
+  // Never leave half of a surrogate pair behind.
+  if (index > 0 && isHighSurrogate(text.charCodeAt(index - 1))) index -= 1;
+
+  return text.slice(0, index).replace(TRAILING_WHITESPACE, '') + '…';
+}
+
 /** HTML bodies are flattened to text first; they are the other legal content type. */
 function plainText(post) {
   if (post.contentType !== CONTENT_TYPE_HTML) return post.content || '';
@@ -64,16 +106,19 @@ export function bodyHtml(post) {
 
 /**
  * Feed-row text: markdown syntax stripped rather than rendered, whitespace
- * collapsed, clipped at a character budget.
+ * collapsed, clipped to a visual-width budget.
  *
- * Character clipping is deliberate — `-webkit-line-clamp` needs
+ * The budget is in *width units*, not characters — a wide (CJK/full-width) glyph
+ * costs two. Character clipping is length-agnostic, and on a 240px screen that
+ * is the difference between three lines and ten: 150 characters of CJK fills
+ * nine lines, 150 of Latin five. `-webkit-line-clamp` cannot help here — it needs
  * `display: -webkit-box`, which Gecko 48 does not have.
  *
  * @param {object} post normalised post
- * @param {number} [limit]
+ * @param {number} [budget] width units to keep (a Latin glyph is 1, CJK is 2)
  * @returns {string}
  */
-export function excerpt(post, limit = 150) {
+export function excerpt(post, budget = DEFAULT_EXCERPT_UNITS) {
   const isHtml = post.contentType === CONTENT_TYPE_HTML;
   let text = isHtml ? plainText(post) : post.content || '';
 
@@ -86,7 +131,5 @@ export function excerpt(post, limit = 150) {
     .replace(WHITESPACE, ' ')
     .trim();
 
-  if (text.length > limit) text = text.slice(0, limit).replace(TRAILING_WHITESPACE, '') + '…';
-
-  return text;
+  return clipToUnits(text, budget);
 }

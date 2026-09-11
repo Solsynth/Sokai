@@ -26,17 +26,23 @@
         </p>
 
         <template v-if="post">
+          <KaiPostQuote v-if="quote" :quote="quote" :label-key="quoteLabelKey" rich />
+
           <p v-if="post.title" class="kai-post__title">{{ post.title }}</p>
 
           <div class="kai-md" v-html="rendered"></div>
+
+          <KaiAttachmentList :attachments="post.attachments" />
 
           <span class="kai-post__author">{{ post.author.display }}</span>
 
           <span class="kai-post__meta">
             <span v-if="handle" class="kai-post__handle">@{{ handle }}</span>
             <span v-if="time" class="kai-post__time">{{ time }}</span>
+            <span v-if="kind">{{ t(kind) }}</span>
             <span v-if="post.editedAt" class="kai-post__time">{{ t('post_edited') }}</span>
             <span v-if="visibility" class="kai-post__visibility">{{ t(visibility) }}</span>
+            <span v-if="post.isTruncated" class="kai-post__time">{{ t('post_truncated') }}</span>
             <span v-if="post.counts.replies" class="kai-post__count">
               {{ t('post_count_replies', { n: post.counts.replies }) }}
             </span>
@@ -87,11 +93,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { bodyHtml } from '../content/markdown.js';
-import { formatRelativeTime, visibilityKey } from '../api/models.js';
+import { formatRelativeTime, postKindKey, visibilityKey } from '../api/models.js';
 import { getPost, listReplies } from '../api/solian.js';
+import KaiAttachmentList from '../components/KaiAttachmentList.vue';
 import KaiHeader from '../components/KaiHeader.vue';
 import KaiList from '../components/KaiList.vue';
 import KaiListItem from '../components/KaiListItem.vue';
+import KaiPostQuote from '../components/KaiPostQuote.vue';
 import KaiPostRow from '../components/KaiPostRow.vue';
 import KaiProgress from '../components/KaiProgress.vue';
 import { t } from '../kaios/l10n.js';
@@ -136,6 +144,16 @@ const time = computed(() => {
 });
 
 const visibility = computed(() => (post.value ? visibilityKey(post.value.visibility) : null));
+
+const kind = computed(() => (post.value ? postKindKey(post.value.kind) : null));
+
+const quote = computed(() =>
+  post.value ? post.value.forwardedFrom || post.value.repliedTo : null,
+);
+
+const quoteLabelKey = computed(() =>
+  post.value && post.value.forwardedFrom ? 'post_forwarded_from' : 'post_replied_to',
+);
 
 const canLoadMoreReplies = computed(
   () => repliesStatus.value === 'ready' && replies.value.length < repliesTotal.value,

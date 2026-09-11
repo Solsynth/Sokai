@@ -26,12 +26,22 @@ function normalizeAuthor(raw) {
 }
 
 /**
- * An embedded `replied_post` / `forwarded_post`, flattened to what a row can
- * show. Never recursed further: those structures nest.
+ * An embedded `replied_post` / `forwarded_post`, flattened to what a quote block
+ * can show. Never recursed past one level: those structures nest.
  */
 function normalizeReference(raw) {
   if (!raw || typeof raw !== 'object' || !raw.id) return null;
-  return { id: String(raw.id), author: { display: normalizeAuthor(raw.publisher).display } };
+  return {
+    id: String(raw.id),
+    author: normalizeAuthor(raw.publisher),
+    title: raw.title || null,
+    content: typeof raw.content === 'string' ? raw.content : '',
+    /** 0 = markdown, 1 = html. */
+    contentType: raw.content_type || 0,
+    publishedAt: raw.published_at || raw.created_at || null,
+    isTruncated: Boolean(raw.is_truncated),
+    attachments: normalizeAttachments(raw.attachments),
+  };
 }
 
 function normalizeTags(raw) {
@@ -45,6 +55,156 @@ function normalizeTags(raw) {
   }
 
   return tags;
+}
+
+/* --- Attachments ------------------------------------------------------- */
+
+/* MIME prefixes are the first answer; the extension covers the files the API
+   leaves `mime_type` empty on, the same fallback FloatLand uses. */
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'avif'];
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogv', 'mov', 'mkv', 'avi', 'flv', 'm4v', '3gp'];
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma', 'opus'];
+
+const KIND_KEYS = {
+  image: 'post_attach_image',
+  video: 'post_attach_video',
+  audio: 'post_attach_audio',
+  file: 'post_attach_file',
+};
+
+function extensionOf(name) {
+  const dot = name.lastIndexOf('.');
+  return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
+}
+
+function startsWith(value, prefix) {
+  return value.slice(0, prefix.length) === prefix;
+}
+
+/**
+ * @param {string} mimeType
+ * @param {string} name
+ * @returns {'image'|'video'|'audio'|'file'}
+ */
+export function attachmentKind(mimeType, name) {
+  const mime = typeof mimeType === 'string' ? mimeType : '';
+  if (mime) {
+    if (startsWith(mime, 'image/')) return 'image';
+    if (startsWith(mime, 'video/')) return 'video';
+    if (startsWith(mime, 'audio/')) return 'audio';
+    return 'file';
+  }
+
+  const extension = extensionOf(typeof name === 'string' ? name : '');
+  if (IMAGE_EXTENSIONS.indexOf(extension) !== -1) return 'image';
+  if (VIDEO_EXTENSIONS.indexOf(extension) !== -1) return 'video';
+  if (AUDIO_EXTENSIONS.indexOf(extension) !== -1) return 'audio';
+  return 'file';
+}
+
+/**
+ * @param {string} kind from `attachmentKind`
+ * @returns {string} string-table key for the row's `[image]` marker
+ */
+export function attachmentKindKey(kind) {
+  return KIND_KEYS[kind] || 'post_attach_file';
+}
+
+const KILOBYTE = 1024;
+const MEGABYTE = 1048576;
+
+/** Locale-neutral on purpose: `Intl` is not worth its bytes on Gecko 48. */
+function formatBytes(size) {
+  if (typeof size !== 'number' || size <= 0) return '';
+  if (size < KILOBYTE) return size + ' B';
+  if (size < MEGABYTE) {
+    const kilobytes = size / KILOBYTE;
+    // 1.5 KB keeps a digit a file browser would show; above ten it is noise.
+    return (kilobytes < 10 ? Math.round(kilobytes * 10) / 10 : Math.round(kilobytes)) + ' KB';
+  }
+  return (size / MEGABYTE).toFixed(1) + ' MB';
+}
+
+const NAME_BUDGET = 22;
+
+/**
+ * One line of attachment metadata for a 240px row: pixel dimensions for media
+ * (the file name is a `image_picker_<uuid>.jpg` on the wire), the name for
+ * anything else, and the size.
+ *
+ * @param {object} attachment normalised attachment
+ * @returns {string}
+ */
+export function describeAttachment(attachment) {
+  const parts = [];
+  const isMedia = attachment.kind === 'image' || attachment.kind === 'video';
+
+  if (isMedia && attachment.width && attachment.height) {
+    parts.push(attachment.width + '×' + attachment.height);
+  } else if (attachment.name) {
+    parts.push(
+      attachment.name.length > NAME_BUDGET
+        ? attachment.name.slice(0, NAME_BUDGET) + '…'
+        : attachment.name,
+    );
+  }
+
+  const size = formatBytes(attachment.size);
+  if (size) parts.push(size);
+
+  return parts.join(' · ');
+}
+
+/**
+ * What the wire's attachment object is cut down to.
+ *
+ * Nothing here is downloaded. `url` was null on all 90 attachments in a sampled
+ * list response, `has_thumbnail` was set on one (a video poster), and the file
+ * behind `/drive/files/{id}` is the original — several megabytes each. A row
+ * renders this metadata instead, which is also why the detail screen does not
+ * embed images.
+ */
+function normalizeAttachment(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+
+  const name = typeof raw.name === 'string' ? raw.name : '';
+  const mimeType = typeof raw.mime_type === 'string' ? raw.mime_type : '';
+
+  return {
+    id: String(raw.id),
+    name,
+    mimeType,
+    kind: attachmentKind(mimeType, name),
+    size: typeof raw.size === 'number' && raw.size > 0 ? raw.size : 0,
+    width: raw.width || 0,
+    height: raw.height || 0,
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Array<object>} drops anything without an id
+ */
+function normalizeAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeAttachment).filter(Boolean);
+}
+
+/**
+ * Post kind (`type` on the wire) → string-table key. A moment is the default and
+ * needs no label; an unknown enum renders as nothing rather than as a number.
+ * @param {number} kind
+ * @returns {string|null}
+ */
+export function postKindKey(kind) {
+  switch (kind) {
+    case 1:
+      return 'post_kind_article';
+    case 2:
+      return 'post_kind_blog';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -90,7 +250,7 @@ export function normalizePost(raw) {
     },
     reactions,
     tags: normalizeTags(raw.tags),
-    attachmentCount: Array.isArray(raw.attachments) ? raw.attachments.length : 0,
+    attachments: normalizeAttachments(raw.attachments),
     author: normalizeAuthor(raw.publisher),
     repliedTo: normalizeReference(raw.replied_post),
     forwardedFrom: normalizeReference(raw.forwarded_post),

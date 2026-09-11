@@ -98,10 +98,11 @@ every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
 key events against canned copies of the Solar Network responses: the post-list request itself
 (privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), D-pad movement and
-list-loop wrap, `Enter` to open a post whose body must render as markdown rather than as escaped
-text, the replies that arrive with it, and `Back` at the top level falling through to the
-platform. 36 assertions. This is the check that proves the polyfills are actually present rather
-than merely configured.
+list-loop wrap, the row's quote, attachment and count lines, `Enter` to open a post whose body
+must render as markdown rather than as escaped text (with its quoted parent rendered as markdown
+too), the replies that arrive with it, the status-bar inset rule, and `Back` at the top level
+falling through to the platform. 44 assertions. This is the check that proves the polyfills are
+actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
 JavaScript and app behaviour, not DOM API age. Confirm on a handset before a store release.
@@ -117,8 +118,26 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   of the palette: the public guide documents no colour spec, so `--kai-color-accent` is the one
   knob to re-theme.
 - **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiProgress`,
-  `KaiPostRow`; `KaiInput` is kept for the compose screen that follows the read path. Add the
-  rest (Tab, Dialog, Option Menu, …) when a screen needs them.
+  `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
+  kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option
+  Menu, …) when a screen needs them.
+- **Post rows** carry what the wire already gives: author and handle, time, `edited`, kind
+  (`Article`/`Blog`, moments unlabelled), non-public visibility, a `truncated` marker, the title,
+  a three-line excerpt, the quoted parent of a reply or forward, attachment lines, reply/boost/
+  reaction counts and tags. The excerpt is clipped by *visual width* — a CJK glyph costs two
+  units (`src/content/markdown.js`) — because a character budget that fills five lines of Latin
+  fills ten of CJK, and `-webkit-line-clamp` needs `display: -webkit-box`, which Gecko 48 lacks.
+- **Attachments render as metadata, never as downloads**: `[image] 810×1440 · 350 KB`. In a
+  sampled list response `url` was null on all 90 attachments, `has_thumbnail` was set on one (a
+  video poster), and `https://api.solian.app/drive/files/{id}` 307s to the original, several
+  megabytes each. Rendering a picture would mean downloading those over 2G on a 240px screen;
+  the file behind `/drive/files/{id}?thumbnail=true` 404s where the platform has no thumbnail.
+  Rows show one attachment and count the rest; the detail screen lists them all.
+- **Safe area** — the KaiOS status bar is 26px and `manifest.webapp` does not request
+  `fullscreen`, so it is shown. Some builds reserve that space, others draw the bar over the
+  app, and no API reports which; `src/kaios/screen.js` derives it from the panel and the viewport
+  and publishes `--kai-safe-top`, which the header consumes as padding (its background then runs
+  under the bar). Nothing changes off-device, where `screen` is a monitor.
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
@@ -156,7 +175,7 @@ src/
   App.vue                  the view map + softkey bar
   api/                     Solar Network client, wire → model normalisers
   content/markdown.js      post bodies: markdown in the detail, plain text in a row
-  kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR
+  kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR, status bar
   components/              KaiOS UI components
   views/                   Explore, Post, About
   styles/kaios.css         design tokens + primitives
@@ -173,7 +192,7 @@ dist/                      the only installable app package (build output)
   path has supported IIFE for years.
 - **No source maps.** Three transpilers deep a map would be a chain of approximations, and the
   package has to exclude it anyway.
-- **Bundle size** is ~324kB (~128kB gzip). Roughly half of it is core-js: its compat data is
+- **Bundle size** is ~329kB (~131kB gzip). Roughly half of it is core-js: its compat data is
   deliberately conservative and polyfills spec-conformance details for engines as new as Firefox
   69. The rest is Vue plus `markdown-it`, which renders post bodies — a hand-written renderer
   would be smaller, but escaping user content is exactly the bug class worth paying a library

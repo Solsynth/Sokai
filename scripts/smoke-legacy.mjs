@@ -26,6 +26,8 @@ import { pathToFileURL } from 'node:url';
 
 import { JSDOM } from 'jsdom';
 
+import { STATUS_BAR_PX, statusBarInset } from '../src/kaios/screen.js';
+
 const failures = [];
 let steps = 0;
 
@@ -39,6 +41,9 @@ function check(label, condition, observed) {
 
 const navState = (nodes) => nodes.map((node) => node.getAttribute('nav-selected'));
 
+/** Rendered text, with Vue's template whitespace collapsed. */
+const tight = (value) => value.replace(/\s+/g, ' ').trim();
+
 /* --- Canned API responses ------------------------------------------------ */
 
 const HOUR_MS = 3600000;
@@ -46,6 +51,7 @@ const HOUR_MS = 3600000;
 const FEED_POST_ID = '01a09055-3a56-7bc1-b59b-c84e56100be9';
 const SECOND_POST_ID = '01a09028-3836-7c15-8a22-93b7b7db11e0';
 const REPLY_ID = '01a08ff3-1852-7114-883c-3f05ac1bcb96';
+const FORWARD_ID = '01a089c1-e23b-7c68-9e8f-498a77d2ae08';
 
 /** The wire shape observed from `https://api.solian.app`: snake_case, integer enums. */
 function wirePost(overrides) {
@@ -89,7 +95,39 @@ function wirePost(overrides) {
 
 const FEED = [
   wirePost({
+    title: 'SN notes',
+    type: 1,
+    is_truncated: true,
+    replies_count: 3,
+    boost_count: 2,
+    reactions_count: { pray: 1, laugh: 1 },
     content: '# SN notes\n\n- supports X\n- and Y\n\nSee [the docs](https://example.com/docs) for more.',
+    attachments: [
+      {
+        id: '01M28ESTWBSXQSTMVVBYYFDXSK',
+        name: 'image_picker_C094B4E1.jpg',
+        mime_type: 'image/jpeg',
+        size: 358482,
+        width: 810,
+        height: 1440,
+        has_thumbnail: false,
+      },
+      {
+        id: '01M27VGQRP4WP819BZ0TXDN7HF',
+        name: 'clip.mp4',
+        mime_type: 'video/mp4',
+        size: 2470997,
+        width: 1800,
+        height: 1168,
+      },
+    ],
+    forwarded_post_id: FORWARD_ID,
+    forwarded_post: {
+      id: FORWARD_ID,
+      content: 'source body text',
+      publisher: { id: 'c', type: 0, name: 'QRBG3376', nick: 'QRBG3376' },
+      attachments: [{ id: 'f1', name: 'a.png', mime_type: 'image/png', size: 1024, width: 100, height: 200 }],
+    },
   }),
   wirePost({
     id: SECOND_POST_ID,
@@ -109,6 +147,13 @@ const DETAIL = wirePost({
   replies_count: 1,
   edited_at: new Date(Date.now() - HOUR_MS / 2).toISOString(),
   tags: [{ name: 'sokai' }, { name: null }],
+  attachments: [{ id: 'd1', name: 'notes.pdf', mime_type: 'application/pdf', size: 1536 }],
+  forwarded_post_id: FORWARD_ID,
+  forwarded_post: {
+    id: FORWARD_ID,
+    content: 'Quoted source body.',
+    publisher: { id: 'c', type: 0, name: 'QRBG3376', nick: 'QRBG3376' },
+  },
 });
 
 const REPLIES = [
@@ -311,7 +356,11 @@ if (listRequest) {
 }
 check('one request is made for the post list', requests.length === 1, requests.length);
 
-check('rows show the author display name', texts('.kai-post__author').join('|') === 'iCat|Solsynth', texts('.kai-post__author'));
+check(
+  'rows show the author display name and handle',
+  texts('.kai-post__author').map(tight).join('|') === 'iCat @iCat|Solsynth @Solsynth',
+  texts('.kai-post__author').map(tight),
+);
 check(
   'rows show a relative timestamp through the l10n layer',
   text('.kai-post__time') === 'post_hours_ago(h)',
@@ -319,8 +368,8 @@ check(
 );
 check(
   'a reply row names the post it answered',
-  texts('.kai-post__meta')[1].indexOf('post_replied_to(name)') !== -1,
-  texts('.kai-post__meta'),
+  texts('.kai-post__quote-label')[1] === 'post_replied_to(name)',
+  texts('.kai-post__quote-label'),
 );
 check(
   'a null publication date falls back to the creation time',
@@ -331,6 +380,55 @@ check(
   'rows carry text, not markup',
   all('.kai-md').length === 0 && text('.kai-post__excerpt') === 'SN notes - supports X - and Y See the docs for more.',
   { markdownBlocks: all('.kai-md').length, excerpt: text('.kai-post__excerpt') },
+);
+check(
+  'a row labels the post kind, title and truncation',
+  text('.kai-post__title') === 'SN notes' &&
+    tight(text('.kai-post__meta')).indexOf('post_kind_article') !== -1 &&
+    tight(text('.kai-post__meta')).indexOf('post_truncated') !== -1,
+  { title: text('.kai-post__title'), meta: tight(text('.kai-post__meta')) },
+);
+check(
+  'a forwarded row quotes its source and counts its attachments',
+  text('.kai-post__quote-label') === 'post_forwarded_from(name)' &&
+    text('.kai-post__quote-text') === 'source body text' &&
+    text('.kai-post__quote-attach').trim() === 'post_count_attachments(n)',
+  {
+    label: text('.kai-post__quote-label'),
+    quote: text('.kai-post__quote-text'),
+    attachments: text('.kai-post__quote-attach').trim(),
+  },
+);
+check(
+  'rows summarise attachments and count the ones they leave out',
+  texts('.kai-post__attach').map(tight).join(' | ') ===
+    '[post_attach_image] 810×1440 · 350 KB | post_more_attachments(n)',
+  texts('.kai-post__attach').map(tight),
+);
+check(
+  'rows show the reply, boost and reaction counts',
+  // Vue condenses the whitespace between the three spans away, so compare the
+  // label sequence rather than the rendered spacing.
+  text('.kai-post__counts').replace(/\s+/g, '') ===
+    'post_count_replies(n)post_count_boosts(n)post_count_reactions(n)',
+  text('.kai-post__counts'),
+);
+check(
+  'the status bar inset only applies where the bar overlaps the app',
+  statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 320 }) ===
+    STATUS_BAR_PX &&
+    statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 294 }) === 0 &&
+    statusBarInset({ screenWidth: 1024, screenHeight: 768, innerWidth: 1024, innerHeight: 768 }) === 0,
+  [
+    statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 320 }),
+    statusBarInset({ screenWidth: 240, screenHeight: 320, innerWidth: 240, innerHeight: 294 }),
+    statusBarInset({ screenWidth: 1024, screenHeight: 768, innerWidth: 1024, innerHeight: 768 }),
+  ],
+);
+check(
+  'a desktop-sized viewport leaves the header unpadded',
+  document.documentElement.style.getPropertyValue('--kai-safe-top') === '0px',
+  document.documentElement.style.getPropertyValue('--kai-safe-top'),
 );
 
 /* --- D-pad -------------------------------------------------------------- */
@@ -410,6 +508,17 @@ check(
     (label) => text('.kai-content > div.kai-post').indexOf(label) !== -1,
   ),
   text('.kai-content > div.kai-post').slice(0, 200),
+);
+check(
+  'the detail renders the quoted post as markdown',
+  all('.kai-md--quote').length === 1 && tight(text('.kai-md--quote')) === 'Quoted source body.',
+  tight(text('.kai-md--quote')),
+);
+check(
+  'the detail lists every attachment',
+  texts('.kai-content > div.kai-post .kai-post__attach').map(tight).join(' | ') ===
+    '[post_attach_file] notes.pdf · 1.5 KB',
+  texts('.kai-content > div.kai-post .kai-post__attach').map(tight),
 );
 
 const replyRows = all('li.kai-post');
