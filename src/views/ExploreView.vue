@@ -10,9 +10,11 @@
           {{ t('error_load_failed') }}
         </p>
 
-        <!-- The page controls sit above the feed: flipping is a list action,
-             not something hidden twenty rows down. The posts mark themselves
-             `initial`, so the highlight still starts on the first post. -->
+        <!-- The searchbar: a row that reads as a field, pushing the Search
+             screen. The pager and the posts follow, so the top of the feed is
+             the sketched layout: searchbar over the page controls. -->
+        <KaiListItem class="kai-searchbar" :primary="t('search_hint')" @select="push('search')" />
+
         <KaiPager v-if="pages > 1" :page="page" :pages="pages" @go="load" />
 
         <KaiList class="kai-list--flat">

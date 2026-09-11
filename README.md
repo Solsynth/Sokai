@@ -9,10 +9,12 @@ Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 The app opens on a **dashboard** — the brand mark with a clock and a countdown to the next
 Solar Network event, and one row per top-level screen, currently Explore and About, with room
 for the log-in and notification entries that come next. Explore lists public Solar Network posts
-from `api.solian.app`, with pictures, and the page-flip controls sit above the feed; opening one
-shows its body as markdown, its attachments above the card, and its replies underneath. D-pad
-and softkeys only. The right softkey is held for the write actions that follow the read path —
-reply, reactions — and is empty until they land.
+from `api.solian.app`, with pictures, and the page-flip controls sit above the feed in one row —
+previous, the page count, next — under a searchbar that pushes the **Search** screen: a field,
+and the same page controls over its results. Opening a post shows its body as markdown, its
+attachments above the card, and its replies underneath. D-pad and softkeys only. The right
+softkey is held for the write actions that follow the read path — reply, reactions — and is
+empty until they land.
 
 Every read route is anonymous — no `Authorization` header — and the server limits anonymous
 responses to published, non-draft, public posts. Composing, reactions and video playback are not
@@ -102,14 +104,16 @@ every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
 key events against canned copies of the Solar Network responses: the dashboard's entries, clock,
 countdown and the bare circular spinner it shows while a page flips, the post-list request
-(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), the pager above the feed
-with the highlight starting on the first post, D-pad movement and list-loop wrap, the row's
-quote, picture, attachment and count lines, `Enter` to open a post
+(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), the searchbar above the
+one-row pager (previous, count, next) with the highlight starting on the first post, D-pad
+movement and list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to
+open a post
 whose body must render as markdown rather than as escaped text (with its quoted parent rendered
 as markdown too, its attachments above the card, and only Solar Network file images fetched), the
-replies that arrive with it, the status-bar inset rule, and `Back` at the top level falling
-through to the platform. 72 assertions. This is the check that proves the polyfills are actually
-present rather than merely configured.
+replies that arrive with it, the status-bar inset rule, the searchbar pushing the Search screen
+whose field starts highlighted and whose committed query hits the posts search endpoint, and
+`Back` at the top level falling through to the platform. 78 assertions. This is the check that
+proves the polyfills are actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
 JavaScript and app behaviour, not DOM API age. Confirm on a handset before a store release.
@@ -196,11 +200,11 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
-  than the screen and unreachable. The feed's page-flip controls sit above the posts: the total
-  page count as a centred label, with the previous and next cells as edge-to-edge borderless
-  rows under it, so a focused cell is the plain accent highlight — reachable with `Up` from the
-  first post or by wrapping past the last; primary content registers as `initial`, so the
-  highlight starts on the first post rather than on the controls. Selection is tracked in
+  than the screen and unreachable. The feed's page-flip controls sit above the posts in one
+  edge-to-edge row — previous, the total page count, next — under a searchbar that pushes the
+  Search screen; both are reachable with `Up` from the first post or by wrapping past the last.
+  Primary content registers as `initial`, so the highlight starts on the first post (or the
+  search field on the Search screen) rather than on the controls. Selection is tracked in
   `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
   compatibility.
@@ -223,7 +227,9 @@ for the write paths that come later.
 
 `src/api/solian.js` is the only module that knows an API URL. Every route it calls is anonymous:
 public Sphere reads need no `Authorization` header, and the server limits anonymous responses to
-published, non-draft, public posts. The one exception to "reads" is the dashboard's countdown,
+published, non-draft, public posts. Search is the post list with a `query` term — the server's
+semantic engine answers it, which is why a search can take a few seconds — and people search
+(`/stargate/accounts/search`) exists on the server for when a People scope is added. The one exception to "reads" is the dashboard's countdown,
 which uses the calendar/countdown route under a named account (`solsynth`, one constant at the
 top of the module): the `/accounts/me` variant requires a session, so the countdown is read the
 way the app can read it, and the response mixes the named account's public events with the

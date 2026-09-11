@@ -41,6 +41,9 @@ onMounted(() => {
   uid.value = registerSelectable({
     el: root,
     onEnter: () => emit('submit'),
+    // On a search screen the field is the primary control: the highlight (and
+    // so the platform's keyboard) starts here.
+    initial: true,
   });
 });
 

@@ -1,19 +1,11 @@
 <template>
   <div class="kai-pager">
-    <!-- The wide cell: where the total page count lives. -->
-    <p v-if="pages > 1" class="kai-pager__status">
-      {{ t('post_page', { page, pages }) }}
-    </p>
-
-    <!-- Left and right page cells, boxed side by side. -->
-    <KaiList class="kai-pager__nav">
-      <KaiListItem v-if="page > 1" :primary="t('action_prev_page')" @select="emit('go', page - 1)" />
-      <KaiListItem
-        v-if="page < pages"
-        :primary="t('action_next_page')"
-        @select="emit('go', page + 1)"
-      />
-    </KaiList>
+    <!-- One row: previous, the page count, next. -->
+    <div class="kai-pager__nav">
+      <KaiListItem v-if="page > 1" class="kai-pager__cell" :primary="t('action_prev_page')" @select="emit('go', page - 1)" />
+      <p v-if="pages > 1" class="kai-pager__status">{{ t('post_page', { page, pages }) }}</p>
+      <KaiListItem v-if="page < pages" class="kai-pager__cell" :primary="t('action_next_page')" @select="emit('go', page + 1)" />
+    </div>
   </div>
 </template>
 
@@ -24,12 +16,11 @@ import { t } from '../kaios/l10n.js';
 
 /**
  * Page flip controls for an offset-paginated list, rendered above the feed.
- * The total page count is a centred label on top; the previous and next cells
- * are edge-to-edge rows underneath — no boxes, so the focused row is the plain
- * accent highlight. Both cells are ordinary selectable rows, so the D-pad
- * reaches them from the posts (UP from the first post, or the list loop
- * wrapping around the end). The posts mark themselves `initial`, so the
- * highlight does not land on the controls when the screen mounts.
+ * One edge-to-edge row: previous, the total page count, next — no boxes, so a
+ * focused cell is the plain accent highlight. The cells are ordinary selectable
+ * rows, so the D-pad reaches them from the posts (UP from the first post, or
+ * the list loop wrapping around the end). The posts mark themselves `initial`,
+ * so the highlight does not land on the controls when the screen mounts.
  */
 defineProps({
   /** 1-based. */

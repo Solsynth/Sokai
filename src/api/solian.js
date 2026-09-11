@@ -42,12 +42,15 @@ function accept() {
 }
 
 /**
- * @param {{ take?: number, offset?: number }} [options]
+ * @param {{ take?: number, offset?: number, query?: string }} [options]
+ *   `query` is the server's post search term (the semantic engine answers it);
+ *   without it the call is the plain feed.
  * @returns {Promise<{ posts: Array<object>, total: number }>}
  */
-export async function listPosts({ take = DEFAULT_TAKE, offset = 0 } = {}) {
-  const url =
+export async function listPosts({ take = DEFAULT_TAKE, offset = 0, query = '' } = {}) {
+  let url =
     API_BASE_URL + '/sphere/posts?take=' + take + '&offset=' + offset + '&replies=false&orderDesc=true';
+  if (query) url += '&query=' + encodeURIComponent(query);
 
   const response = await request(url, accept());
   return { posts: normalizePostList(response.data), total: readTotal(response.headers) };

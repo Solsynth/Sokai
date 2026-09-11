@@ -376,42 +376,65 @@ body {
   font-size: var(--kai-fs-p-sec);
 }
 
-/* --- Pager ----------------------------------------------------------- */
+/* --- Search ---------------------------------------------------------- */
 
-/* The total page count is a centred label; the prev/next cells are edge-to-edge
-   rows with no boxes, so the focused row is the plain accent highlight and its
-   label stays readable (the boxed cells' own background used to win the cascade
-   over the selected state, leaving light text on a light cell). */
-.kai-pager {
-  margin: 0.8rem 0 0;
-}
-
-.kai-pager__status {
-  margin: 0;
-  padding: 0.6rem 0;
-  /* Explicitly borderless: without a declaration jsdom computes the width as
-     its 16px default, and this label is pinned borderless by the runtime gate. */
-  border: 0;
-  color: var(--kai-color-text-muted);
-  font-size: var(--kai-fs-p-thi);
-  text-align: center;
-}
-
-.kai-pager__nav {
-  margin: 0;
-}
-
-.kai-pager__nav .kai-list-item {
-  margin: 0 calc(-1 * var(--kai-gutter));
+/* The search entry above the pager reads as a field: edge-to-edge, muted
+   placeholder text, and the plain accent highlight when focused. */
+.kai-searchbar {
+  margin: 0 calc(-1 * var(--kai-gutter)) 0.6rem;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   background: transparent;
+  color: var(--kai-color-text-muted);
+}
+
+.kai-searchbar[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+/* --- Pager ----------------------------------------------------------- */
+
+/* One edge-to-edge row: previous, the total page count, next. The cells carry
+   the plain accent highlight when focused (their own background must never win
+   the cascade over the selected state — that left light text on a light row),
+   and the count is a centred label between them. */
+.kai-pager {
+  margin: 0 0 0.6rem;
+}
+
+.kai-pager__nav {
+  display: flex;
+  align-items: stretch;
+  margin: 0 calc(-1 * var(--kai-gutter));
+}
+
+.kai-pager__nav .kai-list-item {
+  flex: 1;
+  margin: 0;
+  padding: 0 0.4rem;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  text-align: center;
 }
 
 .kai-pager__nav .kai-list-item[nav-selected="true"] {
   background: var(--kai-color-accent);
   color: var(--kai-color-on-accent);
+}
+
+.kai-pager__status {
+  margin: 0;
+  padding: 0 0.6rem;
+  border: 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+  text-align: center;
+  white-space: nowrap;
+  align-self: center;
 }
 
 /* --- Text ----------------------------------------------------------- */

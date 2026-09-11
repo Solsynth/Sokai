@@ -593,14 +593,21 @@ check(
 
 await press('ArrowDown');
 check(
-  'DOWN reaches the pager row',
-  Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')),
-  { pagerSelected: Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')) },
+  'DOWN from the last post wraps to the searchbar at the top',
+  text('.kai-searchbar[nav-selected="true"]') === 'search_hint',
+  text('.kai-searchbar[nav-selected="true"]'),
 );
 
 await press('ArrowDown');
 check(
-  'DOWN at the end wraps to the top (design-guide list loop)',
+  'DOWN reaches the pager row',
+  Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')),
+  { pagerSelected: Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')) },
+);
+
+await press('ArrowDown');
+check(
+  'the list loop returns to the first post',
   rows[0].getAttribute('nav-selected') === 'true',
   navState(rows),
 );
@@ -616,35 +623,47 @@ check(
 
 check(
   'the first page offers a next page, and names the page it is',
-  texts('.kai-list-item__primary').join('|') === 'action_next_page' &&
+  texts('.kai-pager .kai-list-item__primary').join('|') === 'action_next_page' &&
     tight(text('.kai-pager__status')) === 'post_page(page,pages)',
-  { pager: texts('.kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
+  { pager: texts('.kai-pager .kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
 );
 check(
-  'the pager is a count label above the page rows',
+  'the searchbar sits above the page controls',
+  document.querySelector('.kai-searchbar') !== null &&
+    document.querySelector('.kai-searchbar').nextElementSibling === document.querySelector('.kai-pager'),
+  {
+    searchbar: Boolean(document.querySelector('.kai-searchbar')),
+    nextSibling: document.querySelector('.kai-searchbar')
+      ? document.querySelector('.kai-searchbar').nextElementSibling &&
+        document.querySelector('.kai-searchbar').nextElementSibling.className
+      : null,
+  },
+);
+check(
+  'the pager is one row: the count and the next cell',
   (() => {
     const pager = document.querySelector('.kai-pager');
-    const status = document.querySelector('.kai-pager__status');
     const nav = document.querySelector('.kai-pager__nav');
-    if (!pager || !status || !nav) return false;
+    const status = document.querySelector('.kai-pager__status');
+    const next = document.querySelector('.kai-pager__cell');
+    if (!pager || !nav || !status || !next) return false;
     const statusStyle = window.getComputedStyle(status);
     const navStyle = window.getComputedStyle(nav);
     return (
-      status.parentElement === pager &&
+      status.parentElement === nav &&
       nav.parentElement === pager &&
-      status.nextElementSibling === nav &&
+      status.nextElementSibling === next &&
+      navStyle.display === 'flex' &&
       statusStyle.borderTopWidth === '0px' &&
-      statusStyle.textAlign === 'center' &&
-      navStyle.display !== 'flex'
+      statusStyle.textAlign === 'center'
     );
   })(),
   (() => {
-    const status = document.querySelector('.kai-pager__status');
     const nav = document.querySelector('.kai-pager__nav');
+    const status = document.querySelector('.kai-pager__status');
     return {
-      statusBorder: status ? window.getComputedStyle(status).borderTopWidth : null,
-      statusAlign: status ? window.getComputedStyle(status).textAlign : null,
       navDisplay: nav ? window.getComputedStyle(nav).display : null,
+      statusBorder: status ? window.getComputedStyle(status).borderTopWidth : null,
     };
   })(),
 );
@@ -681,32 +700,27 @@ check(
 );
 check(
   'the second page offers both directions',
-  texts('.kai-list-item__primary').join('|') === 'action_prev_page|action_next_page',
-  texts('.kai-list-item__primary'),
+  texts('.kai-pager .kai-list-item__primary').join('|') === 'action_prev_page|action_next_page',
+  texts('.kai-pager .kai-list-item__primary'),
 );
 check(
-  'the two page cells stack edge to edge, previous then next, without boxes',
+  'previous, count and next share one row',
   (() => {
-    const cells = document.querySelectorAll('.kai-pager__nav .kai-list-item');
-    if (cells.length !== 2) return false;
-    const first = window.getComputedStyle(cells[0]);
-    const second = window.getComputedStyle(cells[1]);
+    const cells = document.querySelectorAll('.kai-pager__cell');
+    const status = document.querySelector('.kai-pager__status');
+    if (cells.length !== 2 || !status) return false;
     return (
       cells[0].textContent.trim() === 'action_prev_page' &&
       cells[1].textContent.trim() === 'action_next_page' &&
-      first.borderTopWidth === '0px' &&
-      second.borderTopWidth === '0px' &&
-      first.backgroundColor === 'rgba(0, 0, 0, 0)' &&
-      second.backgroundColor === 'rgba(0, 0, 0, 0)'
+      status.previousElementSibling === cells[0] &&
+      status.nextElementSibling === cells[1] &&
+      window.getComputedStyle(cells[0]).borderTopWidth === '0px' &&
+      window.getComputedStyle(cells[1]).borderTopWidth === '0px'
     );
   })(),
   Array.prototype.map.call(
-    document.querySelectorAll('.kai-pager__nav .kai-list-item'),
-    (node) => ({
-      text: node.textContent.trim(),
-      border: window.getComputedStyle(node).borderTopWidth,
-      background: window.getComputedStyle(node).backgroundColor,
-    }),
+    document.querySelectorAll('.kai-pager__cell'),
+    (node) => node.textContent.trim(),
   ),
 );
 check(
@@ -921,6 +935,66 @@ check('About opens from the dashboard', text('.kai-header__title') === 'nav_abou
 check('About shows the compiled version', about.includes('0.2.0'), about);
 check('About shows the compiled target', about.includes('KaiOS 2.5 (Gecko 48)'), about);
 
+await press('SoftLeft');
+await until(() => document.querySelectorAll('.kai-list-item').length === 2);
+
+/* --- Search ------------------------------------------------------------ */
+
+// From the dashboard, the first entry is Explore: open it and walk up to the
+// searchbar (UP twice from the first post: pager cell, then searchbar).
+await press('Enter');
+await until(() => all('li.kai-post').length === 2);
+await press('ArrowUp');
+await press('ArrowUp');
+check(
+  'UP twice from the first post reaches the searchbar',
+  text('.kai-searchbar[nav-selected="true"]') === 'search_hint',
+  text('.kai-searchbar[nav-selected="true"]'),
+);
+
+await press('Enter');
+await until(() => text('.kai-header__title') === 'nav_search');
+check(
+  'the searchbar pushes the Search screen, whose field starts highlighted',
+  text('.kai-header__title') === 'nav_search' &&
+    document.querySelector('.kai-field__input[nav-selected="true"]') !== null,
+  {
+    header: text('.kai-header__title'),
+    fieldSelected: Boolean(document.querySelector('.kai-field__input[nav-selected="true"]')),
+  },
+);
+
+// Type a term and commit with Enter.
+const field = document.querySelector('.kai-field__input');
+field.value = 'sol';
+field.dispatchEvent(new window.Event('input', { bubbles: true }));
+await flush();
+await press('Enter');
+await until(() => all('li.kai-post').length === 2);
+
+const searchRequest = requests.filter((request) => request.url.indexOf('query=sol') !== -1)[0];
+check(
+  'the search hits the posts search endpoint',
+  Boolean(searchRequest) &&
+    searchRequest.url ===
+      'https://api.solian.app/sphere/posts?take=20&offset=0&replies=false&orderDesc=true&query=sol',
+  searchRequest ? searchRequest.url : null,
+);
+check(
+  'search results render as post rows under their own page controls',
+  all('li.kai-post').length === 2 &&
+    document.querySelector('.kai-pager') !== null &&
+    document.querySelector('.kai-pager').nextElementSibling ===
+      document.querySelector('.kai-content > ul.kai-list--flat'),
+  {
+    rows: all('li.kai-post').length,
+    pager: Boolean(document.querySelector('.kai-pager')),
+  },
+);
+
+// Back out to the dashboard, where the platform takes Back.
+await press('SoftLeft');
+await until(() => text('.kai-header__title') === 'nav_explore');
 await press('SoftLeft');
 await until(() => document.querySelectorAll('.kai-list-item').length === 2);
 

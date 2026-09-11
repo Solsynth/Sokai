@@ -15,10 +15,12 @@ import AboutView from './views/AboutView.vue';
 import DashboardView from './views/DashboardView.vue';
 import ExploreView from './views/ExploreView.vue';
 import PostView from './views/PostView.vue';
+import SearchView from './views/SearchView.vue';
 
 const VIEWS = {
   dashboard: DashboardView,
   explore: ExploreView,
+  search: SearchView,
   post: PostView,
   about: AboutView,
 };
