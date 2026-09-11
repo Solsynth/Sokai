@@ -1,0 +1,308 @@
+/*
+ * KaiOS design system: tokens + primitives.
+ *
+ * Sources of truth
+ *  - typography: developer.kaiostech.com/docs/design-guide/typography
+ *    (1rem = 10px at the 140ppi QVGA 240x320 baseline)
+ *  - chrome metrics and palette: the KaiOS team's own sample app
+ *    (github.com/kaiostech/sample-vanilla). The public design guide has no
+ *    colour page, so the shipped sample is the de-facto reference.
+ *
+ * Gecko 48 constraints — `npm run verify` fails the build if these reappear:
+ *  - no CSS Grid (shipped in FF52), no flex `gap` (FF63)
+ *  - no `:is()` / `:where()` / `:has()`, no `min()` / `max()` / `clamp()`
+ *  - no `:placeholder-shown` (FF51), no `:focus-within` (FF52)
+ * All layout here is flexbox + margins.
+ */
+
+html {
+  /* The design guide's unit system: 1rem == 10px on the reference display. */
+  font-size: 10px;
+}
+
+:root {
+  --kai-font-family: "Open Sans", "Noto Sans", sans-serif;
+
+  /* Type ramp, design-guide/typography. Names match the guide's labels. */
+  --kai-fs-h1: 1.7rem;
+  --kai-fs-h3: 1.4rem;
+  --kai-fs-h4: 1.4rem;
+  --kai-fs-h5: 1.4rem;
+  --kai-fs-p-pri: 1.7rem;
+  --kai-fs-p-sec: 1.4rem;
+  --kai-fs-p-thi: 1.2rem;
+  --kai-fw-regular: 400;
+  --kai-fw-semibold: 600;
+
+  /* Chrome metrics, from the KaiOS sample app. */
+  --kai-header-height: 3.6rem;
+  --kai-softkey-height: 3rem;
+  --kai-row-height: 4rem;
+
+  /* Palette, from the KaiOS sample app. */
+  --kai-color-bg: #e1e2e1;
+  --kai-color-surface: #f5f5f6;
+  --kai-color-text: #242424;
+  --kai-color-text-muted: #9b9b9b;
+  --kai-color-border: #cbcbcb;
+  --kai-color-on-accent: #ffffff;
+
+  /* Brand accent. Single knob: change this one value for a re-theme. */
+  --kai-color-accent: #9b27af;
+
+  --kai-radius: 0.6rem;
+  --kai-gutter: 1rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--kai-color-bg);
+  color: var(--kai-color-text);
+  font-family: var(--kai-font-family);
+  font-size: var(--kai-fs-p-pri);
+  /* The app owns the viewport; the platform never scrolls the document. */
+  overflow: hidden;
+}
+
+.kai-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* A screen = header + scrolling content + softkey bar. */
+.kai-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.kai-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--kai-gutter);
+}
+
+/* The highlight is the affordance; a second outline would be noise. */
+[nav-selectable="true"] {
+  outline: none;
+}
+
+/* --- Header --------------------------------------------------------- */
+
+.kai-header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: var(--kai-header-height);
+  padding: 0 var(--kai-gutter);
+  background: var(--kai-color-accent);
+}
+
+.kai-header__title {
+  margin: 0;
+  color: var(--kai-color-on-accent);
+  font-size: var(--kai-fs-h1);
+  font-weight: var(--kai-fw-semibold);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Softkey bar ---------------------------------------------------- */
+
+.kai-softkey {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: var(--kai-softkey-height);
+  padding: 0 0.5rem;
+  background: #fff;
+  border-top: 0.2rem solid var(--kai-color-border);
+  white-space: nowrap;
+}
+
+.kai-softkey__key {
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--kai-color-text);
+  font-size: var(--kai-fs-h5);
+  font-weight: var(--kai-fw-semibold);
+  text-overflow: ellipsis;
+}
+
+.kai-softkey__key--left {
+  text-align: left;
+  padding-right: 0.5rem;
+}
+
+.kai-softkey__key--center {
+  flex: 0 0 auto;
+  max-width: 12rem;
+  text-align: center;
+  /* The sample renders the centre key noticeably larger than the side keys. */
+  font-size: 1.8rem;
+  text-transform: uppercase;
+}
+
+.kai-softkey__key--right {
+  text-align: right;
+  padding-left: 0.5rem;
+}
+
+/* --- List ----------------------------------------------------------- */
+
+.kai-list {
+  list-style: none;
+  margin: var(--kai-gutter) 0;
+  padding: 0;
+}
+
+.kai-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--kai-row-height);
+  margin-bottom: 0.9rem;
+  padding: 0.6rem var(--kai-gutter);
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-surface);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+}
+
+.kai-list-item[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-list-item__primary {
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-list-item__secondary {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-list-item[nav-selected="true"] .kai-list-item__secondary {
+  color: var(--kai-color-on-accent);
+}
+
+/* --- Text field ----------------------------------------------------- */
+
+.kai-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: var(--kai-gutter) 0;
+  padding-top: 1.4rem;
+}
+
+.kai-field__input {
+  width: 100%;
+  padding: 0.7rem 0;
+  border: 0;
+  border-bottom: 0.1rem solid var(--kai-color-border);
+  background: transparent;
+  color: var(--kai-color-text);
+  font-family: inherit;
+  font-size: 1.6rem;
+}
+
+.kai-field__label {
+  position: absolute;
+  left: 0;
+  top: 1.4rem;
+  color: var(--kai-color-text-muted);
+  font-size: 1.6rem;
+  pointer-events: none;
+}
+
+/* Raised state is driven by selection + value, not by `:placeholder-shown`
+   (FF51) or `:focus-within` (FF52). */
+.kai-field__label--raised {
+  top: 0;
+  color: var(--kai-color-accent);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-field__input:focus {
+  border-bottom-width: 0.2rem;
+  border-bottom-color: var(--kai-color-accent);
+}
+
+/* --- Progress indicator --------------------------------------------- */
+
+.kai-progress {
+  height: 0.4rem;
+  margin: var(--kai-gutter) 0;
+  background: var(--kai-color-border);
+  overflow: hidden;
+}
+
+.kai-progress__bar {
+  width: 30%;
+  height: 100%;
+  background: var(--kai-color-accent);
+  animation: kai-progress 1.2s linear infinite;
+}
+
+@keyframes kai-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(333%);
+  }
+}
+
+/* --- Text ----------------------------------------------------------- */
+
+.kai-text {
+  margin: 0.6rem 0;
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-text--secondary {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-text--error {
+  color: #d32f2f;
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* Separator: introduces a subsection of content (design-guide/ui-component). */
+.kai-separator {
+  margin: 1.4rem 0 0.4rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-h4);
+}
+
+.kai-result {
+  margin-bottom: 0.9rem;
+  padding: 0.6rem var(--kai-gutter);
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-surface);
+}
+
+.kai-result__url {
+  display: block;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}

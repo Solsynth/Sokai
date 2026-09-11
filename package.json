@@ -1,0 +1,31 @@
+{
+  "name": "sokai",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "The Solar Network app for KaiOS. The Sekai of Solar Network, S(e)okai.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "verify": "node scripts/verify-legacy.mjs && node scripts/smoke-legacy.mjs",
+    "package:kaios": "npm run build && npm run verify && node scripts/package-kaios.mjs"
+  },
+  "dependencies": {
+    "core-js": "^3.50.0",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.5",
+    "@babel/preset-env": "^8.0.5",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "acorn": "^8.18.0",
+    "autoprefixer": "^10.5.6",
+    "babel-plugin-polyfill-corejs3": "^1.0.0",
+    "jsdom": "^30.0.1",
+    "vite": "^7.3.6"
+  },
+  "browserslist": [
+    "kaios 2.5"
+  ]
+}

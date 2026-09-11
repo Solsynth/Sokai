@@ -1,0 +1,37 @@
+{
+  "version": "0.2.0",
+  "name": "Sokai",
+  "description": "The Solar Network app for KaiOS. The Sekai of Solar Network, S(e)okai.",
+  "launch_path": "/index.html",
+  "icons": {
+    "16": "/img/icons/icon16x16.png",
+    "48": "/img/icons/icon48x48.png",
+    "60": "/img/icons/icon60x60.png",
+    "128": "/img/icons/icon128x128.png"
+  },
+  "developer": {
+    "name": "Solsynth",
+    "url": "https://solsynth.dev"
+  },
+  "type": "privileged",
+  "permissions": {
+    "systemXHR": {
+      "description": "Required to load remote content"
+    }
+  },
+  "installs_allowed_from": [
+    "*"
+  ],
+  "locales": {
+    "es": {
+      "name": "Sokai",
+      "description": "La aplicación de Solar Network para KaiOS.",
+      "permissions": {
+        "systemXHR": {
+          "description": "Necesario para cargar contenido remoto"
+        }
+      }
+    }
+  },
+  "default_locale": "en"
+}

@@ -1,0 +1,266 @@
+# Gecko 48 build notes
+
+What was discovered while making a Vue 3 app compile to something a KaiOS 2.5 handset
+(Gecko 48 / Firefox 48) can actually execute, why each pipeline decision is where it is, and
+how to recognise the failures again. Measurements are from this project's own builds, at the
+sizes noted.
+
+The short version: **almost every failure here is silent.** Tools that disagree about the
+target do not error, they quietly do the wrong thing, and the result only shows up on a
+device — or in the gates, which is why the gates exist.
+
+## 1. One target, three spellings
+
+`scripts/target.js` declares the target three ways because no two tools accept the same name
+for "KaiOS 2.5".
+
+| Tool | Accepts | Notes |
+| --- | --- | --- |
+| Browserslist (autoprefixer) | `kaios 2.5` | resolves fine |
+| Babel / `@babel/helper-compilation-targets` | `{ firefox: '48' }` | **throws** on KaiOS |
+| esbuild (`build.target`, `build.cssTarget`) | `firefox48` | |
+
+Babel's two failure modes, both thrown from `getTargets`:
+
+```
+['kaios 2.5']  => ERROR: '0' is not a valid target
+{ kaios: '2.5' } => ERROR: 'kaios' is not a valid target
+{ firefox: '48' } => {"firefox":"48.0.0"}
+```
+
+The dangerous part is what happens *next*. The core-js polyfill provider wraps target
+resolution in a fallback: when it cannot resolve targets it uses `babelApi.targets()`, which
+is `{}` — "no targets" — which means **polyfill everything**. It does not warn.
+
+Measured, same source:
+
+| | core-js module files | bundle | gzip |
+| --- | --- | --- | --- |
+| `targets: ['kaios 2.5']` (silently empty) | 431 | 229.32 kB | 78.81 kB |
+| `targets: { firefox: '48' }` | 84 polyfill modules | 186.99 kB | 67.80 kB |
+
+Reproduce:
+
+```bash
+node --input-type=module -e "
+import getTargets from '@babel/helper-compilation-targets';
+try { console.log(getTargets(['kaios 2.5'])) } catch (e) { console.log('ERROR', e.message) }
+"
+```
+
+## 2. core-js's compat data is about spec conformance, not first ship
+
+After fixing the target, `es.array.map` was *still* polyfilled on Firefox 48, where
+`Array.prototype.map` has existed since 2005. The reason is in the data itself:
+
+```js
+data['es.array.map']         // { firefox: "50", … }
+data['es.promise']           // { firefox: "69", … }
+data['es.set']               // { firefox: "53", … }
+data['es.array.includes']    // { firefox: "102", … }
+data['es.object.assign']     // { firefox: "36", … }  → FF48 has it, not polyfilled
+```
+
+The value is the first engine version whose implementation core-js considers *conformant*, not
+the version that introduced the method. So on FF48 core-js replaces `Promise`, `Map`, `Set`,
+`Array.prototype.map`, `String.prototype.split` and more with its own implementations.
+
+Consequences, both real:
+
+- **Size**: ~202 kB / ~76 kB gzip, of which core-js is the bulk (app source is ~20 kB of it).
+- **Speed**: `Promise` is a JavaScript implementation, not the native one, on a 1.1 GHz phone.
+
+This is the correct default — conformance is why the app behaves the same as it would in a
+modern browser — but it is a *choice*, and the lever is the polyfill plugin's
+`shouldInjectPolyfill(name, shouldInject)` if size or scheduler speed ever outweighs it.
+
+## 3. Nothing may escape the syntax pass — except the polyfill library
+
+`@babel/preset-env` at FF48 does not only lower async/await and spread; it also has to handle
+the *dependencies*. core-js is written in modern JavaScript:
+
+```js
+// node_modules/core-js/internals/fails.js
+module.exports = function (exec) {
+  try { return !!exec(); } catch { return true; }   // optional catch binding, ES2019
+};
+```
+
+An early version of the plugin skipped `node_modules/core-js` on the assumption that the
+polyfill library ships ES5. It does not, and the result was `catch {}` in the shipped bundle —
+a hard parse error on the device:
+
+```
+[syntax] js/app.js:3:1446 — Unexpected token
+```
+
+The fix is not "skip fewer things" but "skip nothing, except the one package that must not
+receive injections". `SKIP_ID` in `scripts/vite-plugin-kaios-legacy.js` now matches core-js
+only, and the reason is ordering, not syntax:
+
+**Symptom** (with core-js included in the injection pass):
+
+```
+TypeError: Cannot set properties of undefined (setting 'exports')
+  at requireSharedStore ← requireShared ← requireWellKnownSymbol ← requireToPrimitive
+  ← requireToPropertyKey ← requireObjectGetOwnPropertyDescriptor ← require_export
+  ← requireEs_array_push
+```
+
+`@rollup/plugin-commonjs` emits `var name = { exports: {} };` immediately before the function
+that assigns to it, and the bundle was calling into that module's chain *before* the
+initializer ran. Injecting `import 'core-js/modules/…'` into core-js's own CommonJS files is
+what perturbs that ordering; the mechanism was not reduced to a single line, but the
+correlation is reproducible and the fix is exact.
+
+Ruled out along the way, each by one build:
+
+- the final Babel pass — skipped it (`KAIOS_SKIP_FINAL_PASS`), still threw;
+- the minifier — disabled it (`--minify false`), still threw.
+
+Since core-js *is* the polyfill library, injecting polyfills into it is pointless anyway. Its
+own modern syntax is handled by pass 3 below.
+
+## 4. The last thing that rewrites the code must be the thing enforcing the target
+
+The final ordering that works is three passes, and the placement of the third is the
+load-bearing part:
+
+1. **`transform`** — per module, before bundling. Syntax lowering plus core-js import
+   injection. Must happen while the bundler can still resolve imports.
+2. **bundler + minifier** — deliberately left at `esnext` (see §5).
+3. **`writeBundle`** — after the file is on disk, rewrite it in place. Nothing runs after it.
+
+The failure that forced pass 3 to be last:
+
+```
+[syntax] js/app.js:3:800 — Unexpected token          # `catch {}`, again
+```
+
+Babel had lowered `catch {}` to `catch (_unused) {}`; esbuild's minifier — whose own target was
+still `esnext` — saw an unused binding and dropped it back to `catch {}`. Both stages were
+doing their job, and the union of their work was unparseable on the device.
+
+Two configurations were verified clean, and either invariant is sufficient:
+
+- minifier target `firefox48`, final pass in `renderChunk` (before minification), **or**
+- minifier target `esnext`, final pass after the bundle is written.
+
+The project uses the second, because the first also has to fight Vite's own chunk transpile:
+
+```
+[vite:esbuild-transpile] Transform failed with 6 errors:
+js/app.js:18462:2: ERROR: Transforming const to the configured target environment
+("firefox48" + 2 overrides) is not supported yet
+```
+
+So: **the bundler is told `esnext` and does no lowering at all; Babel owns the target and
+finishes last.** Anything that can rewrite *toward* a newer target must run before the final
+pass — never after it.
+
+## 5. Why Vite is pinned to 7
+
+Vite 8 is rolldown-based. Forced to a single IIFE chunk (which is what a classic-script app
+needs), rolldown inlines its CommonJS runtime **after** the modules that call it. Unminified:
+
+```js
+// line 3
+var require_fails = /* @__PURE__ */ __commonJSMin(((exports, module) => { …
+// line 6266
+var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);
+```
+
+Minified, the helper is `var Y = (e, t) => …` and the app dies on the first line with
+`TypeError: Y is not a function`. Rolldown's runtime is normally a separate chunk imported
+first (`import { t as __commonJSMin } from "../assets/rolldown-runtime-*.js"`), which works for
+ESM output but is not usable on Gecko 48.
+
+Reproduce: install `vite@8`, set `build.rollupOptions.output.format = 'iife'`, build, and
+compare the offsets of the helper definition and its first use.
+
+Vite 7's Rollup path has produced IIFE bundles for years and does it correctly. When revisiting
+this, the check is not "does it build" — it is "does `dist/js/app.js` run", which is what
+`scripts/smoke-legacy.mjs` answers.
+
+## 6. Static gates prove packaging; only execution proves runtime
+
+The static gate (`verify-legacy.mjs`) happily passed the bundle that threw
+`Cannot set properties of undefined` at startup. Parsing is not running.
+
+`smoke-legacy.mjs` therefore boots the **shipped** file in a jsdom realm with every
+post-ES2015 built-in deleted, then drives it with KaiOS key events. That is the check that
+proves the polyfills are actually present, rather than merely configured.
+
+Two lessons about the gate itself:
+
+- **Vue patches the DOM asynchronously.** Assertions immediately after `dispatchEvent` read the
+  previous render. Four "app bugs" turned out to be this; the test now awaits a microtask after
+  every key press.
+- **The realm is jsdom's DOM, which is newer than Gecko 48's.** The gate covers JavaScript
+  built-ins and app behaviour, not DOM API age (`Element.prototype.append` is FF49, for
+  instance, and jsdom provides it). Confirm on a handset before a store release.
+
+## 7. KaiOS platform findings
+
+- **Key names** are exactly `SoftLeft`, `SoftRight`, `Enter`, `ArrowUp/Down/Left/Right`,
+  `Backspace`. Arrow keys simulate the softkeys in the simulator, not on device.
+- **Back semantics are context dependent** (`design-guide/key`): in a text field it clears a
+  character; otherwise it goes up one level; at the top level it leaves the app. The app must
+  therefore *not* consume it in a text field, and must not consume it at the top level either —
+  unhandled is the correct handling.
+- **The D-pad contract in KaiOS's own samples** is a `[nav-selectable]` attribute plus
+  `nav-selected="true"` on the highlighted element, and a softkey bar of `#softkey` with
+  left/centre/right labels. This project keeps those attributes for CSS/tooling compatibility
+  but tracks selection in `nav.js` by uid, because writing `nav-selected` from outside Vue
+  fights the renderer.
+- **Units**: `1rem = 10px` on the guide's reference display (140 ppi, QVGA 240×320).
+- **The public design guide has no colour page.** The full docs sitemap for
+  `design-guide/*` is: action-icon, basic-navigation, hosted-app, key, launcher-icon,
+  marketing-banner, typography, ui-component. The palette here therefore comes from KaiOS's own
+  sample app (`#E1E2E1` background, `#F5F5F6` surface, `#242424` text, `#cbcbcb` border), and
+  chrome metrics (36 px header, 30 px softkey bar, 40 px rows) from the same source.
+- **One genuine conflict in the guide**: the typography table gives software key text as
+  H5 = 14 px/600, while the sample renders the centre key at 18 px. The sample wins for chrome
+  metrics and the table wins for the type ramp; the deviation is commented in
+  `src/styles/kaios.css`.
+- **`cursor: true`** in the manifest enables the platform's "Emulated Cursor Navigation"
+  (`design-guide/basic-navigation`) — an alternative to the app managing selection itself. It is
+  not enabled here because it would fight `nav.js`.
+- **Privileged apps run without `unsafe-eval` and without inline scripts**, so the Vue runtime
+  compiler (which uses `new Function`) is unusable — only precompiled SFCs. Vite resolves `vue`
+  to the runtime-only build already; the gate asserts no `new Function` survives.
+- **`systemXHR` is the only way to reach a server that sends no CORS headers.** It applies to
+  `XMLHttpRequest` created with `mozSystem: true` and has no `fetch()` equivalent, which is why
+  all remote access goes through `src/kaios/xhr.js`. Verified: MDN's search API sends no
+  `Access-Control-Allow-Origin`, so a fetch-based client could not reach it from a page even
+  inside the privileged app.
+
+## 8. Smaller findings
+
+- **Babel 8 removed `bugfixes`** (always on) and **removed `useBuiltIns`** from
+  `@babel/preset-env`; the supported replacement is `babel-plugin-polyfill-corejs3`. Errors are
+  explicit: `The 'useBuiltIns' option has been removed. Please use babel-plugin-polyfill-corejs3 instead.`
+- **`regenerator-runtime` is not needed.** Babel 8 inlines a regenerator helper as a local
+  function (no `function*`, no global `regeneratorRuntime` — both verified absent in the
+  bundle), so the dependency was removed. The async path is exercised by the runtime gate.
+- **Autoprefixer contributes nothing for Gecko** — Firefox does not want the prefixes it adds.
+  It stays configured because it keeps `browserslist` in package.json as the one declaration of
+  the target for CSS tooling, but do not expect output from it.
+- **`build.cssTarget` is the exception to the `esnext` rule.** esbuild lowers CSS completely and
+  safely, so pointing it at `firefox48` is a net win: nested CSS and other modern syntax are
+  compiled rather than shipped.
+- **`zip` alone cannot express the packaging rules.** `scripts/package-kaios.mjs` always
+  re-checks that `manifest.webapp` is at the archive root, because a wrapping folder makes the
+  package silently unrecognisable to the device.
+
+## 9. If you change the pipeline
+
+1. Nothing may be excluded from the syntax pass. core-js is excluded from the *injection* pass
+   only, and for ordering reasons.
+2. Every tool that emits or rewrites JavaScript must be given the real target — or must run
+   before the pass that enforces it. `esnext` is safe for the bundler *only* because Babel
+   finishes last.
+3. Adding a target spelling? Put it in `scripts/target.js`. A tool that does not recognise the
+   target you gave it may not tell you.
+4. `npm run verify` after any change to Vite, Babel, core-js, or Vue versions. Both gates, not
+   just the build.
