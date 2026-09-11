@@ -378,10 +378,48 @@ body {
 
 /* --- Pager ----------------------------------------------------------- */
 
+/* Three boxed cells: the total page count in a wide cell on top, then the
+   previous and next page cells side by side. The cells use the plain list
+   (not `kai-list--flat`) so their boxes are their own, not hairlines. */
+.kai-pager {
+  margin: 0 0 0.8rem;
+}
+
 .kai-pager__status {
-  margin: 0.8rem 0 1.4rem;
+  margin: 0 0 0.8rem;
+  padding: 1rem;
+  /* Longhands: the shorthand with a `var()` colour is computed as borderless
+     by jsdom, and this boxed look is one of the things the runtime gate pins. */
+  border-width: 0.1rem;
+  border-style: solid;
+  border-color: var(--kai-color-border);
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-surface);
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-thi);
+  text-align: center;
+}
+
+.kai-pager__nav {
+  display: flex;
+  margin: 0;
+}
+
+.kai-pager__nav .kai-list-item {
+  flex: 1;
+  margin: 0 0 0.9rem;
+  padding: 0.6rem 0.4rem;
+  border-width: 0.1rem;
+  border-style: solid;
+  border-color: var(--kai-color-border);
+  border-radius: var(--kai-radius);
+  box-shadow: none;
+  background: var(--kai-color-surface);
+  text-align: center;
+}
+
+.kai-pager__nav .kai-list-item + .kai-list-item {
+  margin-left: 0.8rem;
 }
 
 /* --- Text ----------------------------------------------------------- */

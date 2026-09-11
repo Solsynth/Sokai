@@ -1,6 +1,12 @@
 <template>
   <div class="kai-pager">
-    <KaiList class="kai-list--flat">
+    <!-- The wide cell: where the total page count lives. -->
+    <p v-if="pages > 1" class="kai-pager__status">
+      {{ t('post_page', { page, pages }) }}
+    </p>
+
+    <!-- Left and right page cells, boxed side by side. -->
+    <KaiList class="kai-pager__nav">
       <KaiListItem v-if="page > 1" :primary="t('action_prev_page')" @select="emit('go', page - 1)" />
       <KaiListItem
         v-if="page < pages"
@@ -8,10 +14,6 @@
         @select="emit('go', page + 1)"
       />
     </KaiList>
-
-    <p v-if="pages > 1" class="kai-pager__status">
-      {{ t('post_page', { page, pages }) }}
-    </p>
   </div>
 </template>
 
@@ -22,10 +24,12 @@ import { t } from '../kaios/l10n.js';
 
 /**
  * Page flip controls for an offset-paginated list, rendered above the feed.
- * Both rows are ordinary selectable rows, so the D-pad reaches them from the
- * posts — UP from the first post, or the list loop wrapping around the end.
- * The posts mark themselves `initial`, so the highlight does not land on the
- * controls when the screen mounts.
+ * The total page count sits in a wide cell on top; the previous and next cells
+ * are boxed side by side underneath — left is previous, right is next. Both
+ * cells are ordinary selectable rows, so the D-pad reaches them from the posts
+ * (UP from the first post, or the list loop wrapping around the end). The posts
+ * mark themselves `initial`, so the highlight does not land on the controls
+ * when the screen mounts.
  */
 defineProps({
   /** 1-based. */

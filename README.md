@@ -108,7 +108,7 @@ quote, picture, attachment and count lines, `Enter` to open a post
 whose body must render as markdown rather than as escaped text (with its quoted parent rendered
 as markdown too, its attachments above the card, and only Solar Network file images fetched), the
 replies that arrive with it, the status-bar inset rule, and `Back` at the top level falling
-through to the platform. 70 assertions. This is the check that proves the polyfills are actually
+through to the platform. 72 assertions. This is the check that proves the polyfills are actually
 present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
@@ -196,10 +196,11 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Navigation** — the guide's list rules: `Down` at the last item wraps to the first, `Up` at
   the first wraps to the last. An element registered with `scrollFirst` instead takes the arrow
   keys until the view has been scrolled to its end — the post body, which is otherwise taller
-  than the screen and unreachable. The feed's page-flip controls sit above the posts, reachable
-  with `Up` from the first post or by wrapping past the last; primary content registers as
-  `initial`, so the highlight starts on the first post rather than on the controls. Selection is
-  tracked in `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
+  than the screen and unreachable. The feed's page-flip controls sit above the posts as three
+  boxed cells — the total page count in a wide cell on top, previous on the left and next on the
+  right — reachable with `Up` from the first post or by wrapping past the last; primary content
+  registers as `initial`, so the highlight starts on the first post rather than on the controls.
+  Selection is tracked in `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
   compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the

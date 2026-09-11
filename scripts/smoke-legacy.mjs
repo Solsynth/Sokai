@@ -620,6 +620,34 @@ check(
     tight(text('.kai-pager__status')) === 'post_page(page,pages)',
   { pager: texts('.kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
 );
+check(
+  'the pager is a count cell above the page cells',
+  (() => {
+    const pager = document.querySelector('.kai-pager');
+    const status = document.querySelector('.kai-pager__status');
+    const nav = document.querySelector('.kai-pager__nav');
+    if (!pager || !status || !nav) return false;
+    const statusStyle = window.getComputedStyle(status);
+    const navStyle = window.getComputedStyle(nav);
+    return (
+      status.parentElement === pager &&
+      nav.parentElement === pager &&
+      status.nextElementSibling === nav &&
+      statusStyle.borderTopWidth === '1px' &&
+      statusStyle.textAlign === 'center' &&
+      navStyle.display === 'flex'
+    );
+  })(),
+  (() => {
+    const status = document.querySelector('.kai-pager__status');
+    const nav = document.querySelector('.kai-pager__nav');
+    return {
+      statusBorder: status ? window.getComputedStyle(status).borderTopWidth : null,
+      statusAlign: status ? window.getComputedStyle(status).textAlign : null,
+      navDisplay: nav ? window.getComputedStyle(nav).display : null,
+    };
+  })(),
+);
 
 // The highlight is on the pager row above the feed, so Enter flips the page.
 // The stub holds the response for a moment so the loading UI is observable.
@@ -655,6 +683,23 @@ check(
   'the second page offers both directions',
   texts('.kai-list-item__primary').join('|') === 'action_prev_page|action_next_page',
   texts('.kai-list-item__primary'),
+);
+check(
+  'the two page cells sit side by side, previous then next',
+  (() => {
+    const cells = document.querySelectorAll('.kai-pager__nav .kai-list-item');
+    return (
+      cells.length === 2 &&
+      cells[0].textContent.trim() === 'action_prev_page' &&
+      cells[1].textContent.trim() === 'action_next_page' &&
+      window.getComputedStyle(cells[0]).marginLeft === '0px' &&
+      window.getComputedStyle(cells[1]).marginLeft === '8px'
+    );
+  })(),
+  Array.prototype.map.call(
+    document.querySelectorAll('.kai-pager__nav .kai-list-item'),
+    (node) => node.textContent.trim(),
+  ),
 );
 check(
   'focus starts at the top of the new page',
