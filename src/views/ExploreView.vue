@@ -3,23 +3,26 @@
     <KaiHeader :title="t('nav_explore')" />
 
     <main class="kai-content">
-      <KaiProgress v-if="status === 'loading' && !posts.length" :label="t('post_loading')" />
+      <KaiSpinner v-if="loading" />
 
-      <p v-if="status === 'error'" class="kai-text kai-text--error">{{ t('error_load_failed') }}</p>
+      <template v-else>
+        <p v-if="status === 'error'" class="kai-text kai-text--error">
+          {{ t('error_load_failed') }}
+        </p>
 
-      <KaiList>
-        <KaiPostRow
-          v-for="post in posts"
-          :key="post.id"
-          :post="post"
-          @select="push('post', { id: post.id })"
-        />
+        <KaiList class="kai-list--flat">
+          <KaiPostRow
+            v-for="post in posts"
+            :key="post.id"
+            :post="post"
+            @select="push('post', { id: post.id })"
+          />
 
-        <KaiListItem v-if="canLoadMore" :primary="t('action_load_more')" @select="loadMore" />
-        <KaiListItem v-if="status === 'error'" :primary="t('error_retry')" @select="retry" />
-      </KaiList>
+          <KaiListItem v-if="status === 'error'" :primary="t('error_retry')" @select="retry" />
+        </KaiList>
 
-      <KaiProgress v-if="status === 'loading' && posts.length" :label="t('post_loading')" />
+        <KaiPager :page="page" :pages="pages" @go="load" />
+      </template>
     </main>
   </div>
 </template>
@@ -31,8 +34,9 @@ import { listPosts } from '../api/solian.js';
 import KaiHeader from '../components/KaiHeader.vue';
 import KaiList from '../components/KaiList.vue';
 import KaiListItem from '../components/KaiListItem.vue';
+import KaiPager from '../components/KaiPager.vue';
 import KaiPostRow from '../components/KaiPostRow.vue';
-import KaiProgress from '../components/KaiProgress.vue';
+import KaiSpinner from '../components/KaiSpinner.vue';
 import { t } from '../kaios/l10n.js';
 import { setBaseSoftkeys } from '../kaios/nav.js';
 import { pop, push } from '../kaios/views.js';
@@ -48,33 +52,38 @@ const TAKE = 20;
 
 const posts = ref([]);
 const total = ref(0);
-/** Offset of the page being requested — a failed load is retried at this same offset. */
-const offset = ref(0);
+/** 1-based. The API paginates by offset, so a page is `(page - 1) * TAKE`. */
+const page = ref(1);
+/** The page being fetched: a failure is retried at this one, not at `page`. */
+const requested = ref(1);
 /** 'loading' | 'ready' | 'error' */
 const status = ref('loading');
 
-const canLoadMore = computed(() => status.value === 'ready' && posts.value.length < total.value);
+const loading = computed(() => status.value === 'loading');
+const pages = computed(() => (total.value > 0 ? Math.ceil(total.value / TAKE) : 1));
 
-async function load(next) {
-  offset.value = next;
+async function load(target) {
+  requested.value = target;
   status.value = 'loading';
 
   try {
-    const page = await listPosts({ take: TAKE, offset: next });
-    posts.value = next === 0 ? page.posts : posts.value.concat(page.posts);
-    total.value = page.total;
+    const result = await listPosts({ take: TAKE, offset: (target - 1) * TAKE });
+    posts.value = result.posts;
+    total.value = result.total;
+    page.value = target;
     status.value = 'ready';
   } catch (error) {
+    // The page already on screen stays; only the flip failed.
     status.value = 'error';
   }
 }
 
-function loadMore() {
-  load(offset.value + TAKE);
+function retry() {
+  load(requested.value);
 }
 
-function retry() {
-  load(offset.value);
+function nextPage() {
+  load(page.value + 1);
 }
 
 onMounted(() => {
@@ -83,8 +92,11 @@ onMounted(() => {
     // dashboard entry now, not a softkey here.
     left: { label: t('action_back'), onPress: pop },
     center: { label: t('action_open') },
+    // Flipping to the next page is the other thing this screen does, and it fits
+    // the key that is otherwise empty. Gone on the last page, like the row.
+    right: page.value < pages.value ? { label: t('action_next_page'), onPress: nextPage } : { label: '' },
   }));
 
-  load(0);
+  load(1);
 });
 </script>

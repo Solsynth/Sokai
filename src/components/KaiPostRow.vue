@@ -9,7 +9,7 @@
   >
     <span class="kai-post__author">
       {{ post.author.display }}
-      <span v-if="post.author.nick" class="kai-post__handle">@{{ post.author.nick }}</span>
+      <span v-if="post.author.name" class="kai-post__handle">@{{ post.author.name }}</span>
     </span>
 
     <span class="kai-post__meta">

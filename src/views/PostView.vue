@@ -4,15 +4,11 @@
 
     <main class="kai-content kai-content--roomy">
       <!--
-        Attachments sit outside the card and flush against its top edge: the
-        picture is the post, the card is what it says. They are also outside the
-        selectable body, so the D-pad scrolls the text, not the picture.
+        Attachments sit above the post body, flush against it: the picture is the
+        post, the text is what it says. They are also outside the selectable body,
+        so the D-pad scrolls the text, not the picture.
       -->
-      <div
-        v-if="post && post.attachments.length"
-        class="kai-post-extras"
-        :class="{ 'kai-post-extras--media': hasPicture }"
-      >
+      <div v-if="post && post.attachments.length" class="kai-post-extras">
         <KaiAttachmentList :attachments="post.attachments" />
       </div>
 
@@ -28,7 +24,7 @@
         :nav-selected="isBodySelected ? 'true' : 'false'"
         class="kai-post"
       >
-        <KaiProgress v-if="postStatus === 'loading'" :label="t('post_loading')" />
+        <KaiSpinner v-if="postStatus === 'loading'" :label="t('post_loading')" />
 
         <p v-else-if="postStatus === 'not-found'" class="kai-text kai-text--error">
           {{ t('post_not_found') }}
@@ -71,30 +67,30 @@
       <template v-if="post">
         <p class="kai-separator">{{ t('post_replies') }}</p>
 
-        <KaiProgress v-if="repliesStatus === 'loading'" :label="t('post_loading')" />
+        <KaiSpinner v-if="repliesLoading" />
 
-        <p v-else-if="repliesStatus === 'error'" class="kai-text kai-text--error">
-          {{ t('error_load_failed') }}
-        </p>
+        <template v-else>
+          <p v-if="repliesStatus === 'error'" class="kai-text kai-text--error">
+            {{ t('error_load_failed') }}
+          </p>
 
-        <p v-if="repliesStatus === 'ready' && !replies.length" class="kai-text kai-text--secondary">
-          {{ t('post_no_replies') }}
-        </p>
+          <p v-if="repliesStatus === 'ready' && !replies.length" class="kai-text kai-text--secondary">
+            {{ t('post_no_replies') }}
+          </p>
 
-        <KaiList>
-          <KaiPostRow
-            v-for="reply in replies"
-            :key="reply.id"
-            :post="reply"
-            @select="push('post', { id: reply.id })"
-          />
+          <KaiList class="kai-list--flat">
+            <KaiPostRow
+              v-for="reply in replies"
+              :key="reply.id"
+              :post="reply"
+              @select="push('post', { id: reply.id })"
+            />
 
-          <KaiListItem
-            v-if="canLoadMoreReplies"
-            :primary="t('action_load_more')"
-            @select="loadMoreReplies"
-          />
-        </KaiList>
+            <KaiListItem v-if="repliesStatus === 'error'" :primary="t('error_retry')" @select="retryReplies" />
+          </KaiList>
+
+          <KaiPager :page="repliesPage" :pages="repliesPages" @go="loadReplies" />
+        </template>
       </template>
     </main>
   </div>
@@ -110,9 +106,10 @@ import KaiAttachmentList from '../components/KaiAttachmentList.vue';
 import KaiHeader from '../components/KaiHeader.vue';
 import KaiList from '../components/KaiList.vue';
 import KaiListItem from '../components/KaiListItem.vue';
+import KaiPager from '../components/KaiPager.vue';
 import KaiPostQuote from '../components/KaiPostQuote.vue';
 import KaiPostRow from '../components/KaiPostRow.vue';
-import KaiProgress from '../components/KaiProgress.vue';
+import KaiSpinner from '../components/KaiSpinner.vue';
 import { t } from '../kaios/l10n.js';
 import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '../kaios/nav.js';
 import { pop, push } from '../kaios/views.js';
@@ -132,10 +129,17 @@ const postStatus = ref('loading');
 
 const replies = ref([]);
 const repliesTotal = ref(0);
-/** Offset of the page being requested — reloaded on demand, not retried inline. */
-const repliesOffset = ref(0);
+/** 1-based. The API paginates by offset, so a page is `(page - 1) * TAKE`. */
+const repliesPage = ref(1);
+/** The page being fetched: a failure is retried at this one, not at `repliesPage`. */
+const repliesRequested = ref(1);
 /** 'loading' | 'ready' | 'error' */
 const repliesStatus = ref('loading');
+
+const repliesLoading = computed(() => repliesStatus.value === 'loading');
+const repliesPages = computed(() =>
+  repliesTotal.value > 0 ? Math.ceil(repliesTotal.value / TAKE) : 1,
+);
 
 const isBodySelected = computed(() => uid.value !== 0 && nav.current === uid.value);
 
@@ -182,21 +186,12 @@ const visibility = computed(() => (post.value ? visibilityKey(post.value.visibil
 
 const kind = computed(() => (post.value ? postKindKey(post.value.kind) : null));
 
-/** The seam with the card below is only squared off when there is a picture there. */
-const hasPicture = computed(() =>
-  post.value ? post.value.attachments.some((attachment) => attachment.kind === 'image') : false,
-);
-
 const quote = computed(() =>
   post.value ? post.value.forwardedFrom || post.value.repliedTo : null,
 );
 
 const quoteLabelKey = computed(() =>
   post.value && post.value.forwardedFrom ? 'post_forwarded_from' : 'post_replied_to',
-);
-
-const canLoadMoreReplies = computed(
-  () => repliesStatus.value === 'ready' && replies.value.length < repliesTotal.value,
 );
 
 async function loadPost() {
@@ -212,29 +207,30 @@ async function loadPost() {
   }
 }
 
-async function loadReplies(next) {
-  repliesOffset.value = next;
+async function loadReplies(target) {
+  repliesRequested.value = target;
   repliesStatus.value = 'loading';
 
   try {
-    const page = await listReplies(props.params.id, { take: TAKE, offset: next });
-    replies.value = next === 0 ? page.posts : replies.value.concat(page.posts);
-    repliesTotal.value = page.total;
+    const result = await listReplies(props.params.id, { take: TAKE, offset: (target - 1) * TAKE });
+    replies.value = result.posts;
+    repliesTotal.value = result.total;
+    repliesPage.value = target;
     repliesStatus.value = 'ready';
   } catch (error) {
+    // The page already on screen stays; only the flip failed.
     repliesStatus.value = 'error';
   }
 }
 
-function loadMoreReplies() {
-  loadReplies(repliesOffset.value + TAKE);
+function retryReplies() {
+  loadReplies(repliesRequested.value);
 }
 
 /** Both loaders run at once: neither needs the other's result. */
 function reload() {
-  replies.value = [];
   loadPost();
-  loadReplies(0);
+  loadReplies(1);
 }
 
 // Pushing 'post' onto the stack reuses this component instance and only swaps

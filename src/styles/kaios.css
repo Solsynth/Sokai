@@ -141,52 +141,49 @@ body {
 
 /* --- Dashboard ------------------------------------------------------ */
 
-/* Mark and clock sit directly on the background: not everything here is a card. */
+/* Mark and clock sit directly on the background: not everything here is a card.
+   Time and date share the mark's baseline, which is how the reference dashboard's
+   clock card reads; the countdown sits under the line, waiting on nothing. */
 .kai-hero {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   margin: 1.2rem 0 1.6rem;
+}
+
+.kai-hero__line {
+  display: flex;
+  align-items: baseline;
 }
 
 .kai-hero__mark {
   width: auto;
   height: 3.2rem;
-}
-
-.kai-hero__clock {
-  margin-left: 1.2rem;
+  /* The mark is a picture, not type: it should not move the baseline. */
+  align-self: center;
 }
 
 .kai-hero__time {
-  margin: 0;
+  margin: 0 0 0 1.2rem;
   font-size: var(--kai-fs-display);
   font-weight: var(--kai-fw-semibold);
 }
 
 .kai-hero__date {
-  margin: 0.2rem 0 0;
+  margin: 0 0 0 0.8rem;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-sec);
 }
 
-/* The dashboard is a menu, not a stack of cards: hairline separators, no radius,
-   no shadow — the KaiOS sample app's own list look. Selection still takes the
-   accent, which is what makes the row the current one. */
+.kai-hero__countdown {
+  margin: 0.6rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* A list whose rows are flat: no leading gap, so the first divider sits under the
+   header. The row treatment itself is shared with the post rows. */
 .kai-list--flat {
   margin: 0;
-}
-
-.kai-list--flat .kai-list-item {
-  margin-bottom: 0;
-  border-radius: 0;
-  border-top: 0.1rem solid var(--kai-color-border);
-  background: transparent;
-  box-shadow: none;
-}
-
-.kai-list--flat .kai-list-item[nav-selected="true"] {
-  background: var(--kai-color-accent);
-  color: var(--kai-color-on-accent);
 }
 
 /* --- Header --------------------------------------------------------- */
@@ -338,29 +335,53 @@ body {
   border-bottom-color: var(--kai-color-accent);
 }
 
-/* --- Progress indicator --------------------------------------------- */
+/* --- Loading indicator ---------------------------------------------- */
 
-.kai-progress {
-  height: 0.4rem;
+/*
+ * A ring with one coloured quarter, turning. Border-based, so it needs no image
+ * and no extra DOM; centred with room around it, which is what a screen that is
+ * waiting for its first byte should look like.
+ */
+.kai-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 12rem;
   margin: var(--kai-gutter) 0;
-  background: var(--kai-color-border);
-  overflow: hidden;
 }
 
-.kai-progress__bar {
-  width: 30%;
-  height: 100%;
-  background: var(--kai-color-accent);
-  animation: kai-progress 1.2s linear infinite;
+.kai-spinner__ring {
+  display: block;
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 0.3rem solid var(--kai-color-border);
+  border-top-color: var(--kai-color-accent);
+  border-radius: 50%;
+  animation: kai-spin 1s linear infinite;
 }
 
-@keyframes kai-progress {
+@keyframes kai-spin {
   from {
-    transform: translateX(-100%);
+    transform: rotate(0deg);
   }
   to {
-    transform: translateX(333%);
+    transform: rotate(360deg);
   }
+}
+
+.kai-spinner__label {
+  margin: 0.8rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* --- Pager ----------------------------------------------------------- */
+
+.kai-pager__status {
+  margin: 0.8rem 0 1.4rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
 }
 
 /* --- Text ----------------------------------------------------------- */
@@ -390,8 +411,9 @@ body {
 /* --- Post row / post body -------------------------------------------- */
 
 /*
- * This card is both a feed row (`li`) and the detail screen's post container
- * (`div`). Only the row takes the selection colour: the detail body holds
+ * Both a feed row (`li`) and the detail screen's post container (`div`). Neither
+ * is a card any more: the row's edge is the separator from the flat-row rule
+ * below, and only the row takes the selection colour — the detail body holds
  * rendered markdown, which has its own palette (accent links, muted quotes) and
  * would be unreadable on the accent background.
  */
@@ -399,11 +421,27 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin-bottom: 0.9rem;
-  padding: 0.6rem var(--kai-gutter);
-  border-radius: var(--kai-radius);
-  background: var(--kai-color-surface);
-  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+  padding: 0.8rem var(--kai-gutter);
+}
+
+/*
+ * Rows, not cards. A hairline separates them, and it runs the full width of the
+ * screen: the row is pulled out over the content gutter by exactly the amount its
+ * own padding puts back, so the text keeps its inset while the divider — and the
+ * selected row's background, which does the same — reaches both edges. That
+ * full-bleed highlight is the KaiOS sample app's own list look.
+ */
+li.kai-post,
+.kai-list--flat .kai-list-item {
+  margin: 0 calc(-1 * var(--kai-gutter));
+  border-top: 0.1rem solid var(--kai-color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+li.kai-post:not([nav-selected="true"]),
+.kai-list--flat .kai-list-item:not([nav-selected="true"]) {
+  background: transparent;
 }
 
 li.kai-post[nav-selected="true"] {
@@ -509,22 +547,11 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
 }
 
 /*
- * The detail screen's attachments live above the post card, flush against it.
- * With a picture in the block the four touching corners are squared off so the
- * two read as one column instead of two shapes that happen to meet.
+ * The detail screen's attachments live above the post body, flush against it:
+ * the picture is the post, the text is what it says.
  */
 .kai-post-extras {
   margin-bottom: 0;
-}
-
-.kai-post-extras--media .kai-attachment__image:last-of-type {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.kai-post-extras--media + .kai-post {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
 }
 
 /*
@@ -647,7 +674,10 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 .kai-md pre {
   margin: 0 0 0.9rem;
   padding: 0.6rem;
-  background: var(--kai-color-bg);
+  /* The page background is behind the body now that the post is not a card, so a
+     code block has to tint away from it rather than toward it. */
+  background: var(--kai-color-surface);
+  border-left: 0.3rem solid var(--kai-color-border);
   overflow-x: auto;
 }
 

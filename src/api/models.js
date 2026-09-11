@@ -207,6 +207,75 @@ export function postKindKey(kind) {
   }
 }
 
+/* --- Event countdown --------------------------------------------------- */
+
+/**
+ * An event from `/passport/accounts/{name}/calendar/countdown`, cut down to a
+ * one-line countdown. `is_ongoing` is the server's own answer and is trusted over
+ * re-deriving it from the clock.
+ *
+ * @param {object} raw
+ * @returns {object|null}
+ */
+export function normalizeCountdown(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const title = typeof raw.title === 'string' ? raw.title : '';
+  const startTime = raw.start_time || null;
+  if (!title || !startTime) return null;
+
+  return {
+    id: raw.event_id ? String(raw.event_id) : title + '@' + startTime,
+    title,
+    startTime,
+    endTime: raw.end_time || null,
+    isOngoing: Boolean(raw.is_ongoing),
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Array<object>}
+ */
+export function normalizeCountdownList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeCountdown).filter(Boolean);
+}
+
+/**
+ * How far away an event is, as a string-table key and its arguments. The
+ * view formats it, so the wording stays in the string table.
+ *
+ * @param {object} event normalised countdown
+ * @param {number} [now]
+ * @returns {{ key: string, args?: object } | null}
+ */
+export function countdownLabel(event, now = Date.now()) {
+  if (event.isOngoing) return { key: 'countdown_ongoing' };
+
+  const at = Date.parse(event.startTime);
+  if (Number.isNaN(at)) return null;
+
+  const remaining = at - now;
+  if (remaining <= 0) return { key: 'countdown_ongoing' };
+
+  if (remaining >= DAY_MS) {
+    return {
+      key: 'countdown_days',
+      args: { d: Math.floor(remaining / DAY_MS), h: Math.floor((remaining % DAY_MS) / HOUR_MS) },
+    };
+  }
+
+  if (remaining >= HOUR_MS) {
+    return {
+      key: 'countdown_hours',
+      args: { h: Math.floor(remaining / HOUR_MS), m: Math.floor((remaining % HOUR_MS) / MINUTE_MS) },
+    };
+  }
+
+  return { key: 'countdown_minutes', args: { m: Math.max(1, Math.floor(remaining / MINUTE_MS)) } };
+}
+
 /**
  * @param {object} raw
  * @returns {object|null} `null` when `raw` is not a post, so callers can filter

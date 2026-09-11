@@ -8,7 +8,7 @@
  */
 
 import { request } from '../kaios/xhr.js';
-import { normalizePost, normalizePostList } from './models.js';
+import { normalizeCountdownList, normalizePost, normalizePostList } from './models.js';
 
 export const API_BASE_URL = 'https://api.solian.app';
 
@@ -62,6 +62,33 @@ export async function getPost(id) {
 
   const response = await request(url, accept());
   return normalizePost(response.data);
+}
+
+/**
+ * Whose calendar the dashboard counts down to.
+ *
+ * The `/calendar/countdown` route under `/accounts/me` needs a session, which
+ * this increment does not have; the name-scoped route is anonymous, and the
+ * response mixes the named account's public events with the network's own
+ * notable days. The developer account is used so the mix is the network's, not a
+ * private person's — swap this name, or move to `me`, when log-in lands.
+ */
+const COUNTDOWN_ACCOUNT = 'solsynth';
+
+/**
+ * @param {{ take?: number }} [options]
+ * @returns {Promise<Array<object>>} soonest first, as the server orders them
+ */
+export async function listCountdowns({ take = 3 } = {}) {
+  const url =
+    API_BASE_URL +
+    '/passport/accounts/' +
+    encodeURIComponent(COUNTDOWN_ACCOUNT) +
+    '/calendar/countdown?take=' +
+    take;
+
+  const response = await request(url, accept());
+  return normalizeCountdownList(response.data);
 }
 
 /**

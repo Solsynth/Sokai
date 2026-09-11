@@ -166,9 +166,32 @@ const REPLIES = [
 ];
 
 const CANNED = {
-  list: { status: 200, headers: 'x-total: 2\r\n', body: FEED },
+  countdown: {
+    status: 200,
+    headers: '',
+    body: [
+      {
+        event_id: '01f00000-0000-0000-0000-000000000001',
+        event_type: 1,
+        title: 'Solstice',
+        description: 'The network turns a year older.',
+        location: 'the sun',
+        start_time: new Date(Date.now() + 3 * 24 * HOUR_MS + 4 * HOUR_MS).toISOString(),
+        end_time: new Date(Date.now() + 3 * 24 * HOUR_MS + 5 * HOUR_MS).toISOString(),
+        is_all_day: false,
+        days_remaining: 3,
+        hours_remaining: 4,
+        is_ongoing: false,
+        meta: null,
+        account_id: '00000000-0000-0000-0000-000000000001',
+      },
+    ],
+  },
+  list: { status: 200, headers: 'x-total: 42\r\n', body: FEED },
   detail: { status: 200, headers: '', body: DETAIL },
-  replies: { status: 200, headers: 'x-total: 1\r\n', body: REPLIES },
+  replies: { status: 200, headers: 'x-total: 21\r\n', body: REPLIES },
+  /** Milliseconds to hold the feed's next-page response, so the loading UI is observable. */
+  delayFlip: 60,
 };
 
 /** Runs before any other script in the page (see the stub note above). */
@@ -251,13 +274,24 @@ const PREAMBLE = `<script>
 
   function respond(xhr) {
     var url = xhr.url;
-    var canned = url.indexOf('/replies') !== -1
-      ? CANNED.replies
-      : url.indexOf('?') !== -1
-        ? CANNED.list
-        : CANNED.detail;
+    var canned = url.indexOf('/calendar/countdown') !== -1
+      ? CANNED.countdown
+      : url.indexOf('/replies') !== -1
+        ? CANNED.replies
+        : url.indexOf('?') !== -1
+          ? CANNED.list
+          : CANNED.detail;
 
-    xhr.respond(canned.status, canned.body, canned.headers);
+    var delay = url.indexOf('offset=20') !== -1 && url.indexOf('/replies') === -1
+      ? CANNED.delayFlip
+      : 0;
+    if (delay > 0) {
+      setTimeout(function () {
+        xhr.respond(canned.status, canned.body, canned.headers);
+      }, delay);
+    } else {
+      xhr.respond(canned.status, canned.body, canned.headers);
+    }
   }
 })();
 </script>`;
@@ -342,8 +376,8 @@ check(
   { primary: texts('.kai-list-item__primary'), secondary: texts('.kai-list-item__secondary') },
 );
 check(
-  'the dashboard clock shows a time and a date',
-  /^\d{2}:\d{2}:\d{2}$/.test(text('.kai-hero__time')) && /^\d{4}-\d{2}-\d{2}$/.test(text('.kai-hero__date')),
+  'the dashboard clock shows a time and a date, without seconds',
+  /^\d{2}:\d{2}$/.test(text('.kai-hero__time')) && /^\d{4}-\d{2}-\d{2}$/.test(text('.kai-hero__date')),
   { time: text('.kai-hero__time'), date: text('.kai-hero__date') },
 );
 check(
@@ -364,7 +398,17 @@ check(
   Boolean(document.querySelector('.kai-list--flat')) && all('.kai-list-item').length === 2,
   { flat: Boolean(document.querySelector('.kai-list--flat')), entries: all('.kai-list-item').length },
 );
-check('the dashboard asks the network for nothing', requests.length === 0, requests.length);
+await until(() => Boolean(document.querySelector('.kai-hero__countdown')));
+check(
+  'the dashboard asks the network for the countdown and nothing else',
+  requests.length === 1,
+  requests.map((request) => request.url),
+);
+check(
+  'the dashboard counts down to the next event',
+  text('.kai-hero__countdown') === 'Solstice · countdown_days(d,h)',
+  text('.kai-hero__countdown'),
+);
 
 await press('Enter');
 
@@ -377,7 +421,16 @@ check('app mounts', all('#app').length === 1 && rows.length === 2, `explore rows
 check('header renders a localised title', text('.kai-header__title') === 'nav_explore', text('.kai-header__title'));
 check('first row starts selected', rows[0] && rows[0].getAttribute('nav-selected') === 'true', navState(rows));
 
-const listRequest = requests[0];
+check(
+  'the post list is a flat list',
+  Boolean(document.querySelector('.kai-content > ul.kai-list--flat')),
+  all('ul').map((list) => list.className),
+);
+const listRequest = requests.filter(
+  (request) =>
+    request.url ===
+    'https://api.solian.app/sphere/posts?take=20&offset=0&replies=false&orderDesc=true',
+)[0];
 check('the post list is fetched on mount', Boolean(listRequest));
 if (listRequest) {
   check('request uses the systemXHR privilege', listRequest.options && listRequest.options.mozSystem === true);
@@ -392,11 +445,13 @@ if (listRequest) {
     listRequest.url,
   );
 }
-check('one request is made for the post list', requests.length === 1, requests.length);
+check('opening Explore adds exactly the list request', requests.length === 2, requests.length);
 
 check(
-  'rows show the author display name and handle',
-  texts('.kai-post__author').map(tight).join('|') === 'iCat @iCat|Solsynth @Solsynth',
+  'rows show the display name and the unique @handle',
+  // `name` is the unique handle (`@name`); `nick` is the pretty display name,
+  // which is why the fixture keeps them different for the second row.
+  texts('.kai-post__author').map(tight).join('|') === 'iCat @iCat|Solsynth @solsynth',
   texts('.kai-post__author').map(tight),
 );
 check(
@@ -504,24 +559,89 @@ check(
 
 await press('ArrowDown');
 check(
+  'DOWN reaches the pager row',
+  Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')),
+  { pagerSelected: Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')) },
+);
+
+await press('ArrowDown');
+check(
   'DOWN at the end wraps to the top (design-guide list loop)',
   rows[0].getAttribute('nav-selected') === 'true',
   navState(rows),
 );
 
 await press('ArrowUp');
-check('UP at the top wraps to the end', rows[1].getAttribute('nav-selected') === 'true', navState(rows));
+check(
+  'UP at the top wraps to the end',
+  Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')),
+  { pagerSelected: Boolean(document.querySelector('.kai-list-item[nav-selected="true"]')) },
+);
+
+/* --- Page flip ---------------------------------------------------------- */
+
+check(
+  'the first page offers a next page, and names the page it is',
+  texts('.kai-list-item__primary').join('|') === 'action_next_page' &&
+    tight(text('.kai-pager__status')) === 'post_page(page,pages)',
+  { pager: texts('.kai-list-item__primary'), status: tight(text('.kai-pager__status')) },
+);
+
+// The highlight wrapped onto the pager row, so Enter flips the page. The stub
+// holds the response for a moment so the loading UI is observable.
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-spinner')));
+const ring = window.getComputedStyle(document.querySelector('.kai-spinner__ring'));
+check(
+  'the feed spinner is a bare circular ring while the page flips',
+  Boolean(document.querySelector('.kai-spinner')) &&
+    !document.querySelector('.kai-spinner__label') &&
+    ring.borderRadius === '50%' &&
+    ring.width === '32px' &&
+    ring.height === '32px',
+  {
+    label: document.querySelector('.kai-spinner__label')
+      ? document.querySelector('.kai-spinner__label').textContent
+      : null,
+    ring: { width: ring.width, height: ring.height, radius: ring.borderRadius },
+  },
+);
+await until(() => requests.length === 3 && all('li.kai-post').length === 2);
+
+const flippedRows = all('li.kai-post');
+check(
+  'flipping the page fetches the next offset and replaces the list',
+  requests.length === 3 &&
+    requests[2].url ===
+      'https://api.solian.app/sphere/posts?take=20&offset=20&replies=false&orderDesc=true' &&
+    flippedRows.length === 2,
+  { urls: requests.map((request) => request.url), rows: flippedRows.length },
+);
+check(
+  'the second page offers both directions',
+  texts('.kai-list-item__primary').join('|') === 'action_prev_page|action_next_page',
+  texts('.kai-list-item__primary'),
+);
+check(
+  'focus starts at the top of the new page',
+  flippedRows[0].getAttribute('nav-selected') === 'true',
+  navState(flippedRows),
+);
+check(
+  'the softkey offers the next page while there is one',
+  text('.kai-softkey__key--right') === 'action_next_page',
+  text('.kai-softkey__key--right'),
+);
 
 check('softkey shows the centre action', text('.kai-softkey__key--center') === 'action_open', text('.kai-softkey__key--center'));
 check(
   'Explore offers Back, and About is a dashboard entry instead of a softkey',
-  text('.kai-softkey__key--left') === 'action_back' && text('.kai-softkey__key--right') === '',
-  { left: text('.kai-softkey__key--left'), right: text('.kai-softkey__key--right') },
+  text('.kai-softkey__key--left') === 'action_back',
+  { left: text('.kai-softkey__key--left') },
 );
 
 /* --- Post detail -------------------------------------------------------- */
 
-await press('ArrowUp');
 await press('Enter');
 await until(() => document.querySelector('.kai-md h1'));
 
@@ -532,13 +652,21 @@ check(
   text('.kai-softkey__key--left'),
 );
 
-const detailRequests = requests.slice(1);
+const postRequest = requests.filter(
+  (request) => request.url === 'https://api.solian.app/sphere/posts/' + FEED_POST_ID,
+)[0];
+const repliesRequest = requests.filter(
+  (request) =>
+    request.url ===
+    'https://api.solian.app/sphere/posts/' + FEED_POST_ID + '/replies?take=20&offset=0',
+)[0];
 check(
   'the post and its replies are requested together',
-  detailRequests.length === 2 &&
-    detailRequests[0].url === 'https://api.solian.app/sphere/posts/' + FEED_POST_ID &&
-    detailRequests[1].url === 'https://api.solian.app/sphere/posts/' + FEED_POST_ID + '/replies?take=20&offset=0',
-  detailRequests.map((request) => request.url),
+  Boolean(postRequest) &&
+    Boolean(repliesRequest) &&
+    postRequest.options &&
+    postRequest.options.mozSystem === true,
+  requests.map((request) => request.url),
 );
 
 const heading = document.querySelector('.kai-md h1');
@@ -581,14 +709,13 @@ check(
   tight(text('.kai-md--quote')),
 );
 check(
-  'attachments sit above the card, not inside it',
+  'attachments sit above the body, not inside it',
   all('.kai-post-extras .kai-post__attach').length === 1 &&
     all('.kai-content > div.kai-post .kai-post__attach').length === 0 &&
-    all('.kai-post-extras .kai-attachment__image').length === 0 &&
     (document.querySelector('.kai-content').firstElementChild || {}).className === 'kai-post-extras',
   {
     extras: texts('.kai-post-extras .kai-post__attach').map(tight),
-    insideCard: all('.kai-content > div.kai-post .kai-post__attach').length,
+    insideBody: all('.kai-content > div.kai-post .kai-post__attach').length,
     firstChild: (document.querySelector('.kai-content').firstElementChild || {}).className,
   },
 );
@@ -627,11 +754,16 @@ check(
 
 const replyRows = all('li.kai-post');
 check(
-  'replies render under their own separator',
+  'replies render under their own separator, as flat rows',
   text('.kai-separator') === 'post_replies' &&
     replyRows.length === 1 &&
-    replyRows[0].textContent.indexOf('reply body') !== -1,
-  { separator: text('.kai-separator'), replies: replyRows.length },
+    replyRows[0].textContent.indexOf('reply body') !== -1 &&
+    Boolean(document.querySelector('ul.kai-list--flat')),
+  {
+    separator: text('.kai-separator'),
+    replies: replyRows.length,
+    lists: all('ul').map((list) => list.className),
+  },
 );
 
 // The body has nothing to scroll in jsdom (scrollHeight is 0), so the press
@@ -641,6 +773,30 @@ check('DOWN leaves the body for the first reply', replyRows[0].getAttribute('nav
 
 await press('ArrowUp');
 check('UP returns to the body', bodyCard.getAttribute('nav-selected') === 'true', bodyCard.getAttribute('nav-selected'));
+
+await press('ArrowDown');
+await press('ArrowDown');
+check(
+  'the reply pager row is reachable below the replies',
+  Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')),
+  { pagerSelected: Boolean(document.querySelector('.kai-pager .kai-list-item[nav-selected="true"]')) },
+);
+
+await press('Enter');
+await until(() => requests.length === 6);
+
+check(
+  'flipping the reply page fetches the next offset and replaces the list',
+  requests[requests.length - 1].url ===
+    'https://api.solian.app/sphere/posts/' + FEED_POST_ID + '/replies?take=20&offset=20' &&
+    all('li.kai-post').length === 1,
+  { url: requests[requests.length - 1].url, replies: all('li.kai-post').length },
+);
+check(
+  'after the flip the highlight returns to the top of the detail',
+  bodyCard.getAttribute('nav-selected') === 'true',
+  bodyCard.getAttribute('nav-selected'),
+);
 
 /* --- Back, then the other screen ---------------------------------------- */
 

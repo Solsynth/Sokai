@@ -6,10 +6,11 @@ Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 
 ## What it does
 
-The app opens on a **dashboard** — a clock card and one card per top-level screen, currently
-Explore and About, with room for the log-in and notification entries that come next. Explore lists
-public Solar Network posts from `api.solian.app`, with pictures; opening one shows its body as
-markdown, its attachments above the card, and its replies underneath. D-pad and softkeys only.
+The app opens on a **dashboard** — the brand mark with a clock and a countdown to the next
+Solar Network event, and one row per top-level screen, currently Explore and About, with room
+for the log-in and notification entries that come next. Explore lists public Solar Network posts
+from `api.solian.app`, with pictures; opening one shows its body as markdown, its attachments
+above the card, and its replies underneath. D-pad and softkeys only.
 
 Every read route is anonymous — no `Authorization` header — and the server limits anonymous
 responses to published, non-draft, public posts. Composing, reactions and video playback are not
@@ -97,14 +98,15 @@ Two gates, because they catch different things.
 `scripts/smoke-legacy.mjs` — runtime. It boots the **shipped bundle** inside a jsdom realm with
 every post-ES2015 built-in deleted (`Array.prototype.flat`, `Object.fromEntries`,
 `Promise.finally`, `NodeList.prototype.forEach`, `globalThis`, …), then drives it with KaiOS
-key events against canned copies of the Solar Network responses: the dashboard's entries and clock,
-the post-list request (privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed),
-D-pad movement and list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to
-open a post whose body must render as markdown rather than as escaped text (with its quoted parent
-rendered as markdown too, its attachments above the card, and only Solar Network file images
-fetched), the replies that arrive with it, the status-bar inset rule, and `Back` at the top level
-falling through to the platform. 54 assertions. This is the check that proves the polyfills are
-actually present rather than merely configured.
+key events against canned copies of the Solar Network responses: the dashboard's entries, clock,
+countdown and the bare circular spinner it shows while a page flips, the post-list request
+(privileged `systemXHR`, anonymous, offset-paginated, `x-total` parsed), D-pad movement and
+list-loop wrap, the row's quote, picture, attachment and count lines, `Enter` to open a post
+whose body must render as markdown rather than as escaped text (with its quoted parent rendered
+as markdown too, its attachments above the card, and only Solar Network file images fetched), the
+replies that arrive with it, the status-bar inset rule, and `Back` at the top level falling
+through to the platform. 68 assertions. This is the check that proves the polyfills are actually
+present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
 JavaScript and app behaviour, not DOM API age. Confirm on a handset before a store release.
@@ -127,12 +129,17 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1. Secondary text is the other known
   shortfall: `--kai-color-text-muted` measures 2.4:1 on `--kai-color-surface` and 2.1:1 on the
   page background the flat dashboard rows sit on.
-- **Dashboard** — the root screen, after the reference client's dashboard: the brand mark and a
-  clock, both directly on the background (no card), then one flat row per top-level screen with a
-  hairline separator and the accent for the current row — the KaiOS sample app's own list look.
-  The clock needs nothing from the network, so the screen is alive before the first request
-  resolves. This is the extension point — a new screen is a row in `DashboardView.vue`'s
-  `ENTRIES` plus a view in `App.vue`'s map — and the dashboard itself makes no requests. Back at
+- **Dashboard** — the root screen, after the reference client's dashboard: the brand mark, a
+  clock and a countdown to the next event, all directly on the background (no card), then one flat
+  row per top-level screen with a hairline separator and the accent for the current row — the
+  KaiOS sample app's own list look. The clock needs nothing from the network, so the screen is
+  alive before the first request resolves. It shows `HH:MM`, not seconds, and its timer is armed
+  on the minute boundary — one wake-up a minute instead of sixty — and dropped while the app is
+  not visible, so the dashboard does not spend battery repainting the same two digits. The
+  countdown is the one request the dashboard makes, fetched from the calendar/countdown route
+  under a named account (the `/accounts/me` variant needs a session this app does not have yet);
+  a failure hides the line rather than erroring the screen. This is the extension point — a new
+  screen is a row in `DashboardView.vue`'s `ENTRIES` plus a view in `App.vue`'s map. Back at
   the root is not consumed, so the platform takes it and leaves the app.
 - **Icons** — the Solar Network brand artwork from the Solian client's asset set, whose licence is
   copied to `public/img/icons/LICENSE.md` next to it (that licence is not the Apache-2.0 the rest
@@ -146,7 +153,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   block holds a picture the touching corners are squared off so the two read as one column.
   `kai-content--roomy` adds the 12px of breathing room below the header that the card would
   otherwise lose to it.
-- **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiProgress`,
+- **Components** — `KaiHeader`, `KaiSoftkey`, `KaiList`, `KaiListItem`, `KaiPager`, `KaiSpinner`,
   `KaiPostRow` (plus `KaiPostQuote` and `KaiAttachmentList` for what it embeds); `KaiInput` is
   kept for the compose screen that follows the read path. Add the rest (Tab, Dialog, Option
   Menu, …) when a screen needs them.
@@ -208,8 +215,13 @@ for the write paths that come later.
 
 `src/api/solian.js` is the only module that knows an API URL. Every route it calls is anonymous:
 public Sphere reads need no `Authorization` header, and the server limits anonymous responses to
-published, non-draft, public posts. The edge happens to send CORS headers as well, so the same
-code works in the desktop dev server — but the privileged path is what matters on a handset.
+published, non-draft, public posts. The one exception to "reads" is the dashboard's countdown,
+which uses the calendar/countdown route under a named account (`solsynth`, one constant at the
+top of the module): the `/accounts/me` variant requires a session, so the countdown is read the
+way the app can read it, and the response mixes the named account's public events with the
+network's own notable days — the account name is swapped for `me` when log-in lands. The edge
+happens to send CORS headers as well, so the same code works in the desktop dev server — but the
+privileged path is what matters on a handset.
 
 ## Layout
 
@@ -237,7 +249,7 @@ dist/                      the only installable app package (build output)
   path has supported IIFE for years.
 - **No source maps.** Three transpilers deep a map would be a chain of approximations, and the
   package has to exclude it anyway.
-- **Bundle size** is ~331kB (~131kB gzip). Roughly half of it is core-js: its compat data is
+- **Bundle size** is ~337kB (~132kB gzip). Roughly half of it is core-js: its compat data is
   deliberately conservative and polyfills spec-conformance details for engines as new as Firefox
   69. The rest is Vue plus `markdown-it`, which renders post bodies — a hand-written renderer
   would be smaller, but escaping user content is exactly the bug class worth paying a library
