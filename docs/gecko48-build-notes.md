@@ -211,27 +211,30 @@ Two lessons about the gate itself:
 - **The D-pad contract in KaiOS's own samples** is a `[nav-selectable]` attribute plus
   `nav-selected="true"` on the highlighted element, and a softkey bar of `#softkey` with
   left/centre/right labels. This project keeps those attributes for CSS/tooling compatibility
-  but tracks selection in `nav.js` by uid, because writing `nav-selected` from outside Vue
+  but tracks selection in `nav.ts` by uid, because writing `nav-selected` from outside Vue
   fights the renderer.
 - **Units**: `1rem = 10px` on the guide's reference display (140 ppi, QVGA 240×320).
 - **The public design guide has no colour page.** The full docs sitemap for
   `design-guide/*` is: action-icon, basic-navigation, hosted-app, key, launcher-icon,
-  marketing-banner, typography, ui-component. The palette here therefore comes from KaiOS's own
-  sample app (`#E1E2E1` background, `#F5F5F6` surface, `#242424` text, `#cbcbcb` border), and
-  chrome metrics (36 px header, 30 px softkey bar, 40 px rows) from the same source.
+  marketing-banner, typography, ui-component. The original palette therefore came from KaiOS's
+  own sample app (`#E1E2E1` background, `#F5F5F6` surface, `#242424` text, `#cbcbcb` border),
+  and chrome metrics (36 px header, 30 px softkey bar, 40 px rows) from the same source. The
+  app's palette has since moved to the calm "dawn light" re-theme in `src/styles/kaios.css` —
+  same chrome metrics, deeper slate-indigo accent — because the sample's muted grey failed
+  WCAG AA (2.1–2.4:1) and its accent failed both AA pairs (4.1:1 white ink, 3.8:1 as text).
 - **One genuine conflict in the guide**: the typography table gives software key text as
   H5 = 14 px/600, while the sample renders the centre key at 18 px. The sample wins for chrome
   metrics and the table wins for the type ramp; the deviation is commented in
   `src/styles/kaios.css`.
 - **`cursor: true`** in the manifest enables the platform's "Emulated Cursor Navigation"
   (`design-guide/basic-navigation`) — an alternative to the app managing selection itself. It is
-  not enabled here because it would fight `nav.js`.
+  not enabled here because it would fight `nav.ts`.
 - **Privileged apps run without `unsafe-eval` and without inline scripts**, so the Vue runtime
   compiler (which uses `new Function`) is unusable — only precompiled SFCs. Vite resolves `vue`
   to the runtime-only build already; the gate asserts no `new Function` survives.
 - **`systemXHR` is the only way to reach a server that sends no CORS headers.** It applies to
   `XMLHttpRequest` created with `mozSystem: true` and has no `fetch()` equivalent, which is why
-  all remote access goes through `src/kaios/xhr.js`. Verified: MDN's search API sends no
+  all remote access goes through `src/kaios/xhr.ts`. Verified: MDN's search API sends no
   `Access-Control-Allow-Origin`, so a fetch-based client could not reach it from a page even
   inside the privileged app.
 
@@ -343,7 +346,7 @@ for a fully correct local run.
   package silently unrecognisable to the device.
 - **`mozL10n.get()` returns an empty string, not the id, when the locale data could not load.**
   That is how the `file://` case showed up as chrome with blank labels rather than an obvious
-  failure. `t()` in `src/kaios/l10n.js` now falls back to the id for `undefined`, `null` and
+  failure. `t()` in `src/kaios/l10n.ts` now falls back to the id for `undefined`, `null` and
   `''`, so a missing or unloadable translation is visible instead of invisible.
 
 ## 10. If you change the pipeline

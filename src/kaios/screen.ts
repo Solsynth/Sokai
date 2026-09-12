@@ -20,11 +20,15 @@ export const STATUS_BAR_PX = 26;
 /** Wider than any KaiOS panel; a match beyond this is a desktop monitor. */
 const PANEL_MAX_PX = 480;
 
-/**
- * @param {{ screenWidth: number, screenHeight: number, innerWidth: number, innerHeight: number }} metrics
- * @returns {number} pixels the app must leave clear at the top
- */
-export function statusBarInset(metrics) {
+export interface ScreenMetrics {
+  screenWidth: number;
+  screenHeight: number;
+  innerWidth: number;
+  innerHeight: number;
+}
+
+/** Pixels the app must leave clear at the top. */
+export function statusBarInset(metrics: ScreenMetrics): number {
   const onHandset =
     Math.abs(metrics.screenWidth - metrics.innerWidth) <= 1 && metrics.screenWidth <= PANEL_MAX_PX;
   if (!onHandset) return STATUS_BAR_PX;
@@ -37,11 +41,24 @@ export function statusBarInset(metrics) {
 }
 
 /**
+ * The dev server and `npm run preview` are desktop browsers; a handset is a
+ * panel no wider than `PANEL_MAX_PX`. Hash path sync (see `hash.ts`) runs
+ * where this is true and nowhere else — a KaiOS panel has no address bar, and
+ * browser-history entries would fight the platform's Back key.
+ */
+export function isMonitor(): boolean {
+  const screen = window.screen || {};
+  const screenWidth = screen.width || 0;
+  const innerWidth = window.innerWidth || 0;
+  const onHandset = Math.abs(screenWidth - innerWidth) <= 1 && screenWidth <= PANEL_MAX_PX;
+  return !onHandset;
+}
+
+/**
  * Publishes the inset as `--kai-safe-top` on the document element; the header
  * consumes it. Called once at startup, before mount.
- * @returns {number} the inset that was applied
  */
-export function applyStatusBarInset() {
+export function applyStatusBarInset(): number {
   const screen = window.screen || {};
   const inset = statusBarInset({
     screenWidth: screen.width || 0,

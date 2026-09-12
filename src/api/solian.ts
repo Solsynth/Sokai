@@ -4,12 +4,18 @@
  * Every call here is anonymous: the public `/sphere/...` routes need no
  * `Authorization` header, and the server limits anonymous responses to public,
  * published, non-draft posts anyway. No proxy — on device the privileged
- * `systemXHR` path bypasses CORS entirely (see `src/kaios/xhr.js`).
+ * `systemXHR` path bypasses CORS entirely (see `~/src/kaios/xhr.ts`).
  */
 
-import { request } from '../kaios/xhr.js';
-import { bearerToken } from '../kaios/session.js';
-import { normalizeCountdownList, normalizePost, normalizePostList } from './models.js';
+import { request } from '~/src/kaios/xhr.js';
+import { bearerToken } from '~/src/kaios/session.js';
+import {
+  normalizeCountdownList,
+  normalizePost,
+  normalizePostList,
+  type Countdown,
+  type Post,
+} from '~/src/api/models.js';
 
 export const API_BASE_URL = 'https://api.solian.app';
 
@@ -22,8 +28,8 @@ const DEFAULT_TAKE = 20;
  * limits — friends-only, unlisted and draft posts become visible, and
  * per-account routes answer.
  */
-async function apiHeaders() {
-  const headers = { Accept: 'application/json' };
+async function apiHeaders(): Promise<{ headers: Record<string, string> }> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
   const token = await bearerToken();
   if (token) headers.Authorization = 'Bearer ' + token;
   return { headers };
@@ -35,30 +41,30 @@ async function apiHeaders() {
  * 24kB and 350kB — so no CORS or `systemXHR` involvement is needed: plain image
  * loading is cross-origin by design, and the KaiOS privileged CSP starts at
  * `default-src * data: blob:`.
- *
- * @param {string} id attachment id from the wire
- * @returns {string}
  */
-export function fileUrl(id) {
+export function fileUrl(id: string): string {
   return API_BASE_URL + '/drive/files/' + encodeURIComponent(id);
 }
 
-/**
- * Pagination is `offset` + `take`. The body is a bare array; the row count
- * lives in the `x-total` response header.
- */
-function readTotal(headers) {
+/** Pagination is `offset` + `take`. The body is a bare array; the row count lives in `x-total`. */
+function readTotal(headers: Record<string, string>): number {
   const total = parseInt(headers ? headers['x-total'] : '', 10);
   return Number.isNaN(total) ? 0 : total;
 }
 
 /**
- * @param {{ take?: number, offset?: number, query?: string }} [options]
- *   `query` is the server's post search term (the semantic engine answers it);
- *   without it the call is the plain feed.
- * @returns {Promise<{ posts: Array<object>, total: number }>}
+ * The post feed, or its search when `query` is given (the server's semantic
+ * engine answers it — which is why a search can take a few seconds).
  */
-export async function listPosts({ take = DEFAULT_TAKE, offset = 0, query = '' } = {}) {
+export async function listPosts({
+  take = DEFAULT_TAKE,
+  offset = 0,
+  query = '',
+}: {
+  take?: number;
+  offset?: number;
+  query?: string;
+} = {}): Promise<{ posts: Post[]; total: number }> {
   let url =
     API_BASE_URL + '/sphere/posts?take=' + take + '&offset=' + offset + '&replies=false&orderDesc=true';
   if (query) url += '&query=' + encodeURIComponent(query);
@@ -67,11 +73,8 @@ export async function listPosts({ take = DEFAULT_TAKE, offset = 0, query = '' } 
   return { posts: normalizePostList(response.data), total: readTotal(response.headers) };
 }
 
-/**
- * @param {string} id
- * @returns {Promise<object|null>} `null` when the payload is not a post
- */
-export async function getPost(id) {
+/** `null` when the payload is not a post. */
+export async function getPost(id: string): Promise<Post | null> {
   const url = API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id);
 
   const response = await request(url, await apiHeaders());
@@ -86,11 +89,8 @@ export async function getPost(id) {
  */
 const COUNTDOWN_ACCOUNT = 'solsynth';
 
-/**
- * @param {{ take?: number }} [options]
- * @returns {Promise<Array<object>>} soonest first, as the server orders them
- */
-export async function listCountdowns({ take = 3 } = {}) {
+/** Soonest first, as the server orders them. */
+export async function listCountdowns({ take = 3 } = {}): Promise<Countdown[]> {
   const token = await bearerToken();
   if (token) {
     try {
@@ -112,12 +112,11 @@ export async function listCountdowns({ take = 3 } = {}) {
   return normalizeCountdownList(response.data);
 }
 
-/**
- * @param {string} id
- * @param {{ take?: number, offset?: number }} [options]
- * @returns {Promise<{ posts: Array<object>, total: number }>}
- */
-export async function listReplies(id, { take = DEFAULT_TAKE, offset = 0 } = {}) {
+/** A post's replies, offset-paginated like the feed. */
+export async function listReplies(
+  id: string,
+  { take = DEFAULT_TAKE, offset = 0 } = {},
+): Promise<{ posts: Post[]; total: number }> {
   const url =
     API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id) + '/replies?take=' + take + '&offset=' + offset;
 

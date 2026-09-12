@@ -6,6 +6,6 @@
   </footer>
 </template>
 
-<script setup>
-import { softkeys } from '../kaios/nav.js';
+<script setup lang="ts">
+import { softkeys } from '~/src/kaios/nav.js';
 </script>

@@ -26,7 +26,7 @@ import { pathToFileURL } from 'node:url';
 
 import { JSDOM } from 'jsdom';
 
-import { STATUS_BAR_PX, statusBarInset } from '../src/kaios/screen.js';
+import { STATUS_BAR_PX, statusBarInset } from '../src/kaios/screen.ts';
 
 const failures = [];
 let steps = 0;
@@ -213,7 +213,18 @@ const CANNED = {
     headers: '',
     body: { access_token: 'test-access', refresh_token: 'test-refresh', expires_in: 3600 },
   },
-  me: { status: 200, headers: '', body: { id: 'acc-1', name: 'Test User', nick: 'testuser' } },
+  me: {
+    status: 200,
+    headers: '',
+    body: {
+      id: 'acc-1',
+      // Wire convention: `name` is the unique handle (@name), `nick` the
+      // pretty display name — the same split the feed rows use.
+      name: 'testuser',
+      nick: 'Test User',
+      profile: { background: { id: 'banner-1' } },
+    },
+  },
   revoke: { status: 200, headers: '', body: {} },
   /** Milliseconds to hold the feed's next-page response, so the loading UI is observable. */
   delayFlip: 60,
@@ -587,9 +598,15 @@ check(
   },
 );
 check(
-  'rows summarise attachments and count the ones they leave out',
-  texts('.kai-post__attach').map(tight).join(' | ') ===
-    '[post_attach_image] 810×1440 · 350 KB | post_more_attachments(n)',
+  'rows show the picture and count the rest; a picture carries no caption line',
+  (() => {
+    const image = document.querySelector('li.kai-post .kai-attachment__image');
+    const lines = texts('.kai-post__attach').map(tight);
+    // The shown picture has no metadata line under it; only the count of the
+    // attachments it leaves out remains. (The line returns for a picture that
+    // fails to load — the fallback the row needs to keep.)
+    return Boolean(image) && lines.length === 1 && lines[0] === 'post_more_attachments(n)';
+  })(),
   texts('.kai-post__attach').map(tight),
 );
 check(
@@ -611,7 +628,7 @@ check(
   })(),
 );
 check(
-  'a row picture is square, snapped to the screen edges',
+  'a row picture is edge-to-edge with square corners',
   (() => {
     const image = document.querySelector('li.kai-post .kai-attachment__image');
     return Boolean(image) && window.getComputedStyle(image).borderRadius === '0px';
@@ -1201,9 +1218,25 @@ check(
   meRequest ? meRequest.requestHeaders : null,
 );
 check(
-  'the account screen shows the signed-in identity',
-  text('.kai-account__name') === 'testuser' && text('.kai-account__handle') === '@testuser',
-  { name: text('.kai-account__name'), handle: text('.kai-account__handle') },
+  'the account screen shows the signed-in identity and its banner',
+  (() => {
+    const name = text('.kai-account__name');
+    const handle = text('.kai-account__handle');
+    const banner = document.querySelector('.kai-account__banner');
+    return (
+      name === 'Test User' &&
+      handle === '@testuser' &&
+      Boolean(banner) &&
+      banner.getAttribute('src') === 'https://api.solian.app/drive/files/banner-1'
+    );
+  })(),
+  {
+    name: text('.kai-account__name'),
+    handle: text('.kai-account__handle'),
+    banner: (document.querySelector('.kai-account__banner') || {}).getAttribute
+      ? document.querySelector('.kai-account__banner').getAttribute('src')
+      : null,
+  },
 );
 
 // Back to the dashboard: the feed now goes out authenticated.

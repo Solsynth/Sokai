@@ -41,19 +41,33 @@ html {
   --kai-softkey-height: 3rem;
   --kai-row-height: 4rem;
 
-  /* Palette, from the KaiOS sample app. */
-  --kai-color-bg: #e1e2e1;
-  --kai-color-surface: #f5f5f6;
-  --kai-color-text: #242424;
-  --kai-color-text-muted: #9b9b9b;
-  --kai-color-border: #cbcbcb;
+  /*
+   * Palette — the calm "dawn light" re-theme. Cool grey-violet base (the sky
+   * before the sun is up), soft near-black ink, and a slate-indigo accent
+   * pulled from the blue core of the brand mark, deepened until it passes
+   * WCAG AA as both ink and background.
+   *
+   * Measured pairs (see the palette note in the README):
+   *  - white on `--kai-color-accent` 5.21:1  (AA body text wants 4.5)
+   *  - `--kai-color-accent` as text on `--kai-color-surface` 4.82:1
+   *  - `--kai-color-text-muted` on `--kai-color-bg` 5.09:1
+   *  - `--kai-color-text-muted` on `--kai-color-surface` 5.77:1
+   */
+  --kai-color-bg: #e7e8ec;
+  --kai-color-surface: #f5f6f8;
+  --kai-color-text: #22252b;
+  --kai-color-text-muted: #5b616b;
+  --kai-color-border: #c6cad2;
   --kai-color-on-accent: #ffffff;
 
-  /* Brand accent. Single knob: change this one value for a re-theme.
-     `#7577ba` carries white ink at 4.1:1 (WCAG AA wants 4.5 for body text) and
-     itself reads at 3.8:1 against `--kai-color-surface` — see the palette note
-     in the README before changing either. */
-  --kai-color-accent: #7577ba;
+  /* Brand accent. Single knob: change this one value for a re-theme; keep it
+     between the two AA pairs above. The manifest's `theme_color` mirrors it
+     for the Launcher. */
+  --kai-color-accent: #5e6a9e;
+
+  /* Errors are the one warm note in the palette: a deep, quiet red that keeps
+     its meaning without raising the temperature. 6.0:1 on the surface. */
+  --kai-color-error: #b3261e;
 
   --kai-radius: 0.6rem;
   --kai-gutter: 1rem;
@@ -141,9 +155,13 @@ body {
 
 /* --- Dashboard ------------------------------------------------------ */
 
-/* Mark and clock sit directly on the background: not everything here is a card.
-   Time and date share the mark's baseline, which is how the reference dashboard's
-   clock card reads; the countdown sits under the line, waiting on nothing. */
+/*
+ * The hero is the clock. The mark and time share one baseline (the reference
+ * dashboard's clock-card reading), the date demotes to a quiet caption under
+ * the line, and the countdown sits below a hairline with one accent dot
+ * straddling it — the sun on the horizon. Above the line is now, below it is
+ * next; that is the whole screen's structure.
+ */
 .kai-hero {
   display: flex;
   flex-direction: column;
@@ -165,19 +183,41 @@ body {
 .kai-hero__time {
   margin: 0 0 0 1.2rem;
   font-size: var(--kai-fs-display);
-  font-weight: var(--kai-fw-semibold);
+  font-weight: var(--kai-fw-regular);
+  /* Wide-set, light: the one display element in the app reads like an
+     instrument dial rather than a label. */
+  letter-spacing: 0.04em;
 }
 
 .kai-hero__date {
-  margin: 0 0 0 0.8rem;
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+  letter-spacing: 0.08em;
+}
+
+/* The dawn line: a hairline under the clock, with the countdown to the next
+   event hanging from it. The dot is the app's single decorative object — a
+   sun on the horizon, one accent mark, quiet. It sits on the rule by being
+   pulled up half its own height (`margin-top: -0.35rem` on an 0.8rem dot). */
+.kai-hero__countdown {
+  position: relative;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0 0 1.4rem;
+  border-top: 0.1rem solid var(--kai-color-border);
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-sec);
 }
 
-.kai-hero__countdown {
-  margin: 0.6rem 0 0;
-  color: var(--kai-color-text-muted);
-  font-size: var(--kai-fs-p-sec);
+.kai-hero__dawn {
+  position: absolute;
+  top: 0;
+  left: 0.4rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: -0.35rem;
+  border-radius: 50%;
+  background: var(--kai-color-accent);
 }
 
 /* A list whose rows are flat: no leading gap, so the first divider sits under the
@@ -208,6 +248,9 @@ body {
   font-size: var(--kai-fs-h1);
   font-weight: var(--kai-fw-semibold);
   text-transform: uppercase;
+  /* Open tracking on the uppercase title: air between the letters keeps the
+     accent band quiet rather than shouty. */
+  letter-spacing: 0.06em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,7 +314,7 @@ body {
   padding: 0.6rem var(--kai-gutter);
   border-radius: var(--kai-radius);
   background: var(--kai-color-surface);
-  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.14);
 }
 
 .kai-list-item[nav-selected="true"] {
@@ -463,7 +506,7 @@ body {
 }
 
 .kai-text--error {
-  color: #d32f2f;
+  color: var(--kai-color-error);
   font-size: var(--kai-fs-p-sec);
 }
 
@@ -499,7 +542,8 @@ body {
 .kai-content > div.kai-post {
   margin: 0 calc(-1 * var(--kai-gutter));
   background-color: var(--kai-color-surface);
-  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.2);
+  /* A quiet shadow: the card is a step up from the page, not a drop. */
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.14);
   border-radius: 0;
 }
 
@@ -645,9 +689,10 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
  * before any bytes arrive — which is also the only lazy-loading available:
  * Gecko 48 has no `loading="lazy"`.
  *
- * A row crops its one picture (`object-fit` is Firefox 32+, the file is served
- * as a compressed WebP) so the row stays a row; the detail screen shows images
- * whole, because that is why the post was opened.
+ * A row shows its one picture as a square tile the width of the screen
+ * (`object-fit` is Firefox 32+, the file is served as a compressed WebP — see
+ * the `li.kai-post .kai-attachment__image` rule); the detail screen shows
+ * images whole, because that is why the post was opened.
  */
 .kai-attachment__image,
 .kai-md__photo {
@@ -662,12 +707,18 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
   margin-top: 0.4rem;
 }
 
+/*
+ * A row's picture keeps its own aspect ratio — the box follows the wire's
+ * `width`/`height` (`height: auto`), never forced square — and is capped at
+ * the screen width tall: a wide photo is a wide band, a tall one fills the
+ * whole tile height and is cropped by `object-fit: cover` only past that cap.
+ * Snapped to the screen edges like the detail pictures: the content width
+ * plus both gutters, pulled out over the row's own padding. (Negative margins
+ * alone would shift the 100% box without widening it.)
+ */
 li.kai-post .kai-attachment__image {
-  max-height: 12rem;
+  max-height: 24rem;
   object-fit: cover;
-  /* Square and snapped to the screen edges, like the detail pictures: the
-     content width plus both gutters, pulled out over the row's own padding.
-     (Negative margins alone would shift the 100% box without widening it.) */
   border-radius: 0;
   width: calc(100% + 2 * var(--kai-gutter));
   margin: 0.4rem calc(-1 * var(--kai-gutter)) 0;
@@ -843,6 +894,22 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   height: 1.6rem;
   margin-right: 0.8rem;
   border-width: 0.2rem;
+}
+
+/* The profile banner leads the signed-in screen: edge-to-edge like the detail
+   pictures (pulled out over the content gutter), aspect-true, and capped so
+   the identity below it stays on screen. */
+.kai-account__banner-wrap {
+  margin: 0 calc(-1 * var(--kai-gutter));
+}
+
+.kai-account__banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 12rem;
+  object-fit: cover;
+  background: var(--kai-color-border);
 }
 
 /* The identity block leads the signed-in screen: display name over @nick. */

@@ -4,19 +4,23 @@
 
     <main class="kai-content">
       <!--
-        The reference dashboard leads with a clock. It needs nothing from the
-        network, so the screen has something alive on it before any request
-        resolves — and it sits on the background, not on a card. The line under
-        the clock counts down to the next event; it is the reference clock
-        card's second half, fetched separately so the clock never waits on it.
+        The hero is the clock. It needs nothing from the network, so the screen
+        has something alive on it before any request resolves — and it sits on
+        the background, not on a card. The mark and time share one baseline;
+        the date is a quiet caption under them. Below the dawn line — a hairline
+        with one accent dot straddling it, the sun on the horizon — the
+        countdown names the next event; it is fetched separately so the clock
+        never waits on it.
       -->
       <div class="kai-hero">
         <div class="kai-hero__line">
           <img class="kai-hero__mark" src="/img/icons/icon-mark-dark.png" alt="" />
           <p class="kai-hero__time">{{ time }}</p>
-          <p class="kai-hero__date">{{ date }}</p>
         </div>
-        <p v-if="countdown" class="kai-hero__countdown">{{ countdown.title }} · {{ countdownText }}</p>
+        <p class="kai-hero__date">{{ date }}</p>
+        <p v-if="countdown" class="kai-hero__countdown">
+          <span class="kai-hero__dawn"></span>{{ countdown.title }} · {{ countdownText }}
+        </p>
       </div>
 
       <!-- Everything the app can do that is not the post list. Adding a screen
@@ -34,37 +38,43 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import KaiHeader from '../components/KaiHeader.vue';
-import KaiList from '../components/KaiList.vue';
-import KaiListItem from '../components/KaiListItem.vue';
-import { countdownLabel } from '../api/models.js';
-import { listCountdowns } from '../api/solian.js';
-import { t } from '../kaios/l10n.js';
-import { setBaseSoftkeys } from '../kaios/nav.js';
-import { session } from '../kaios/session.js';
-import { push } from '../kaios/views.js';
+import KaiHeader from '~/src/components/KaiHeader.vue';
+import KaiList from '~/src/components/KaiList.vue';
+import KaiListItem from '~/src/components/KaiListItem.vue';
+import { countdownLabel, type Countdown } from '~/src/api/models.js';
+import { listCountdowns } from '~/src/api/solian.js';
+import { t } from '~/src/kaios/l10n.js';
+import { setBaseSoftkeys } from '~/src/kaios/nav.js';
+import { useAccountStore } from '~/src/stores/account.js';
+import { push } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; the dashboard takes none.
-defineProps({
-  params: { type: Object, default: () => ({}) },
-});
+withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
 
-const ENTRIES = [
+interface DashboardEntry {
+  view: string;
+  title: string;
+  description: string;
+}
+
+const ENTRIES: DashboardEntry[] = [
   { view: 'explore', title: 'nav_explore', description: 'nav_explore_desc' },
   { view: 'account', title: 'nav_account', description: 'nav_account_desc' },
   { view: 'about', title: 'nav_about', description: 'nav_about_desc' },
 ];
+
+const accountStore = useAccountStore();
 
 /**
  * The account row reports the session: the signed-in identity when there is
  * one, the plain description when there is not.
  */
 const accountDescription = computed(() => {
-  if (session.phase === 'signed-in' && session.account) {
-    return t('account_signed_in_as', { name: session.account.display });
+  if (accountStore.phase === 'signed-in' && accountStore.account) {
+    return t('account_signed_in_as', { name: accountStore.account.display });
   }
   return t('nav_account_desc');
 });
@@ -77,8 +87,8 @@ const date = ref('');
 /** The countdown label is derived from this, so it advances on the same minute tick. */
 const nowMs = ref(Date.now());
 /** The soonest event, normalised; `null` until it loads or when the load fails. */
-const countdown = ref(null);
-let timer = null;
+const countdown = ref<Countdown | null>(null);
+let timer: ReturnType<typeof setTimeout> | null = null;
 
 const countdownText = computed(() => {
   if (!countdown.value) return '';
@@ -86,12 +96,12 @@ const countdownText = computed(() => {
   return label ? t(label.key, label.args) : '';
 });
 
-function pad(value) {
+function pad(value: number): string {
   return value < 10 ? '0' + value : '' + value;
 }
 
 /** No `Intl` on Gecko 48: the date is written the way the API writes its own. */
-function tick() {
+function tick(): void {
   const now = new Date();
   nowMs.value = now.getTime();
   time.value = pad(now.getHours()) + ':' + pad(now.getMinutes());
@@ -107,8 +117,8 @@ function tick() {
  * Nothing is armed while the app is not visible: the timer is dropped on the way
  * out and re-armed, with a fresh reading, on the way back in.
  */
-function schedule() {
-  clearTimeout(timer);
+function schedule(): void {
+  if (timer) clearTimeout(timer);
   tick();
 
   const now = new Date();
@@ -116,13 +126,16 @@ function schedule() {
   timer = setTimeout(schedule, MINUTE_MS - intoMinute);
 }
 
-function onVisibilityChange() {
-  if (document.hidden) clearTimeout(timer);
-  else schedule();
+function onVisibilityChange(): void {
+  if (document.hidden) {
+    if (timer) clearTimeout(timer);
+  } else {
+    schedule();
+  }
 }
 
 /** The countdown is decoration, so a failure hides the line rather than erroring. */
-async function loadCountdown() {
+async function loadCountdown(): Promise<void> {
   try {
     const items = await listCountdowns();
     countdown.value = items[0] || null;
@@ -144,7 +157,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  clearTimeout(timer);
+  if (timer) clearTimeout(timer);
   document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>

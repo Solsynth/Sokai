@@ -1,14 +1,38 @@
 const DEFAULT_TIMEOUT_MS = 10000;
 
+export interface ApiResponse {
+  status: number;
+  headers: Record<string, string>;
+  data: unknown;
+}
+
+interface RequestOptions {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeout?: number;
+}
+
+interface HttpError extends Error {
+  status: number;
+  code?: string;
+  error?: string;
+}
+
 /**
  * `systemXHR` (see manifest.webapp) only applies to `XMLHttpRequest` objects
  * created with `mozSystem: true`. `fetch()` has no equivalent, which is why
  * every remote call in this app goes through here — the privilege is what lets
  * a privileged app talk to servers that send no CORS headers.
  */
-function createSystemXHR() {
+function createSystemXHR(): XMLHttpRequest {
+  // The options object is a Gecko extension; the DOM lib's constructor knows
+  // nothing of it, so the constructor type is widened locally.
+  const SystemXHR = XMLHttpRequest as unknown as {
+    new (options?: Record<string, unknown>): XMLHttpRequest;
+  };
   try {
-    return new XMLHttpRequest({ mozSystem: true });
+    return new SystemXHR({ mozSystem: true });
   } catch (error) {
     // Hosts without the privilege (or without Gecko) reject the options object.
     // The request still goes out; it just falls back to normal CORS rules.
@@ -24,8 +48,8 @@ function createSystemXHR() {
  * is the same API, but the whole map is what the API client needs and it avoids
  * one round of per-name allowlisting.
  */
-function responseHeaders(xhr) {
-  const headers = {};
+function responseHeaders(xhr: XMLHttpRequest): Record<string, string> {
+  const headers: Record<string, string> = {};
   const raw = typeof xhr.getAllResponseHeaders === 'function' ? xhr.getAllResponseHeaders() : '';
   if (!raw) return headers;
 
@@ -46,8 +70,8 @@ function responseHeaders(xhr) {
  * flow is pending or terminal. Anything else that comes back with a failure
  * status is reported as a bare HTTP status.
  */
-function httpError(xhr) {
-  const error = new Error('HTTP ' + xhr.status);
+function httpError(xhr: XMLHttpRequest): HttpError {
+  const error = new Error('HTTP ' + xhr.status) as HttpError;
   error.status = xhr.status;
 
   const detail = xhr.response;
@@ -61,24 +85,24 @@ function httpError(xhr) {
 }
 
 /**
- * @param {string} url
- * @param {{ method?: string, headers?: object, body?: unknown, timeout?: number }} [options]
- *   `body`, when a string, is sent verbatim (the device flow posts
- *   form-encoded data, so the caller owns the `Content-Type`); any other value
- *   is serialised as JSON. `User-Agent` is never set: browsers forbid it and
- *   send the platform's own.
- * @returns {Promise<{ status: number, headers: object, data: unknown }>}
+ * One remote call. `body`, when a string, is sent verbatim (the device flow
+ * posts form-encoded data, so the caller owns the `Content-Type`); any other
+ * value is serialised as JSON. `User-Agent` is never set: browsers forbid it
+ * and send the platform's own.
  */
-export function request(url, { method = 'GET', headers = {}, body = null, timeout = DEFAULT_TIMEOUT_MS } = {}) {
-  return new Promise((resolve, reject) => {
-    const xhr = createSystemXHR();
+export function request(
+  url: string,
+  { method = 'GET', headers = {}, body = null, timeout = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
+): Promise<ApiResponse> {
+  const { promise, resolve, reject } = Promise.withResolvers<ApiResponse>();
+  const xhr = createSystemXHR();
 
-    xhr.open(method, url, true);
+  xhr.open(method, url, true);
     // The API answers JSON for every endpoint, including its errors.
     xhr.responseType = 'json';
     xhr.timeout = timeout;
 
-    const outgoing = {};
+    const outgoing: Record<string, string> = {};
     let hasContentType = false;
     const names = Object.keys(headers);
 
@@ -111,5 +135,6 @@ export function request(url, { method = 'GET', headers = {}, body = null, timeou
     xhr.send(
       body === null || body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
     );
-  });
+
+  return promise;
 }

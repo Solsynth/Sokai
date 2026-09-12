@@ -38,26 +38,26 @@
   </li>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import KaiAttachmentList from './KaiAttachmentList.vue';
 import KaiPostQuote from './KaiPostQuote.vue';
-import { excerpt } from '../content/markdown.js';
-import { formatRelativeTime, postKindKey, visibilityKey } from '../api/models.js';
-import { t } from '../kaios/l10n.js';
-import { nav, registerSelectable, unregisterSelectable } from '../kaios/nav.js';
+import { excerpt } from '~/src/content/markdown.js';
+import { formatRelativeTime, postKindKey, visibilityKey, type Post } from '~/src/api/models.js';
+import { t } from '~/src/kaios/l10n.js';
+import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
-const props = defineProps({
-  post: { type: Object, required: true },
-});
+const props = defineProps<{
+  post: Post;
+}>();
 
-const emit = defineEmits(['select']);
+const emit = defineEmits<{ select: [] }>();
 
 /** One sample line and a count for the rest: a row is not the place for a gallery. */
 const ATTACHMENT_LINES = 1;
 
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 const uid = ref(0);
 
 const isSelected = computed(() => uid.value !== 0 && nav.current === uid.value);
@@ -69,7 +69,7 @@ const body = computed(() => excerpt(props.post));
 const time = computed(() => {
   const relative = formatRelativeTime(props.post.publishedAt);
   if (!relative) return '';
-  return relative.key ? t(relative.key, relative.args) : relative.text;
+  return 'key' in relative ? t(relative.key, relative.args) : relative.text;
 });
 
 const kind = computed(() => postKindKey(props.post.kind));
@@ -83,7 +83,7 @@ const quoteLabelKey = computed(() =>
 );
 
 const counts = computed(() => {
-  const list = [];
+  const list: Array<{ key: string; n: number }> = [];
   const { replies, boosts, reactions } = props.post.counts;
   if (replies) list.push({ key: 'post_count_replies', n: replies });
   if (boosts) list.push({ key: 'post_count_boosts', n: boosts });

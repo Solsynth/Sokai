@@ -26,10 +26,10 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import KaiList from './KaiList.vue';
 import KaiListItem from './KaiListItem.vue';
-import { t } from '../kaios/l10n.js';
+import { t } from '~/src/kaios/l10n.js';
 
 /** The pager glyphs: typographic arrows every device font carries. */
 const PREV_GLYPH = '‹';
@@ -45,11 +45,11 @@ const NEXT_GLYPH = '›';
  * mark themselves `initial`, so the highlight does not land on the controls
  * when the screen mounts.
  */
-defineProps({
+const props = defineProps<{
   /** 1-based. */
-  page: { type: Number, required: true },
-  pages: { type: Number, required: true },
-});
+  page: number;
+  pages: number;
+}>();
 
-const emit = defineEmits(['go']);
+const emit = defineEmits<{ go: [page: number] }>();
 </script>

@@ -17,18 +17,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted } from 'vue';
 
-import KaiHeader from '../components/KaiHeader.vue';
-import { t } from '../kaios/l10n.js';
-import { setBaseSoftkeys } from '../kaios/nav.js';
-import { canGoBack, pop } from '../kaios/views.js';
+import KaiHeader from '~/src/components/KaiHeader.vue';
+import { t } from '~/src/kaios/l10n.js';
+import { setBaseSoftkeys } from '~/src/kaios/nav.js';
+import { canGoBack, pop } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; About takes none.
-defineProps({
-  params: { type: Object, default: () => ({}) },
-});
+withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
 
 // Replaced at build time by Vite `define` (see vite.config.js).
 const version = __APP_VERSION__;

@@ -5,9 +5,6 @@
   </div>
 </template>
 
-<script setup>
-defineProps({
-  /** Optional caption under the ring; a spinner alone reads fine too. */
-  label: { type: String, default: '' },
-});
+<script setup lang="ts">
+withDefaults(defineProps<{ label?: string }>(), { label: '' });
 </script>

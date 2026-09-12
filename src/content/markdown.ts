@@ -13,7 +13,7 @@
 
 import MarkdownIt from 'markdown-it';
 
-import { fileUrl } from '../api/solian.js';
+import { fileUrl } from '~/src/api/solian.js';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
@@ -39,10 +39,16 @@ const WHITESPACE = /\s+/g;
 const TRAILING_WHITESPACE = /\s+$/;
 
 /**
- * @param {string} src
- * @returns {string} the file id, or `''` when the source is not a Solar file
+ * The body of a post or a quote: the only two fields the renderers read.
+ * Structural typing lets both `Post` and `PostReference` be passed in.
  */
-function bodyFileId(src) {
+export interface PostBody {
+  contentType: number;
+  content: string;
+}
+
+/** The file id, or `''` when the source is not a Solar file. */
+function bodyFileId(src: string): string {
   if (src.slice(0, BODY_FILE_PREFIX.length) !== BODY_FILE_PREFIX) return '';
 
   const id = src.slice(BODY_FILE_PREFIX.length).replace(/[?#].*$/, '');
@@ -53,7 +59,7 @@ function bodyFileId(src) {
 // allowlist by the time a renderer rule runs, so `solian://` has to be admitted
 // here — and only that scheme; every other image is meant to be discarded.
 const defaultValidateLink = md.validateLink;
-md.validateLink = (url) =>
+md.validateLink = (url: string) =>
   url.slice(0, BODY_FILE_PREFIX.length) === BODY_FILE_PREFIX ? true : defaultValidateLink(url);
 
 const defaultImage = md.renderer.rules.image;
@@ -66,7 +72,10 @@ const defaultImage = md.renderer.rules.image;
 md.renderer.rules.image = (tokens, index, options, env, self) => {
   const token = tokens[index];
   const id = bodyFileId(token.attrGet('src') || '');
-  if (!id) return defaultImage(tokens, index, options, env, self);
+  if (!id) {
+    // markdown-it always installs the default rule; the guard is for its types.
+    return defaultImage ? defaultImage(tokens, index, options, env, self) : '';
+  }
 
   const src = md.utils.escapeHtml(fileUrl(id));
   const alt = md.utils.escapeHtml(token.content || '');
@@ -77,7 +86,7 @@ md.renderer.rules.image = (tokens, index, options, env, self) => {
 const DEFAULT_EXCERPT_UNITS = 70;
 
 /** Full-width ranges: CJK, Hangul, kana, and the full-width forms. */
-function isWide(code) {
+function isWide(code: number): boolean {
   return (
     (code >= 0x1100 && code <= 0x115f) ||
     (code >= 0x2e80 && code <= 0xa4cf) ||
@@ -89,16 +98,12 @@ function isWide(code) {
   );
 }
 
-function isHighSurrogate(code) {
+function isHighSurrogate(code: number): boolean {
   return code >= 0xd800 && code <= 0xdbff;
 }
 
-/**
- * @param {string} text
- * @param {number} budget width units
- * @returns {string} `text`, or a prefix of it ending in an ellipsis
- */
-function clipToUnits(text, budget) {
+/** `text`, or a prefix of it ending in an ellipsis. */
+function clipToUnits(text: string, budget: number): string {
   let units = 0;
   let index = 0;
 
@@ -116,7 +121,7 @@ function clipToUnits(text, budget) {
 }
 
 /** HTML bodies are flattened to text first; they are the other legal content type. */
-function plainText(post) {
+function plainText(post: PostBody): string {
   if (post.contentType !== CONTENT_TYPE_HTML) return post.content || '';
   // Text extraction, not sanitising: nothing from this string is ever inserted
   // as markup — it is escaped by the markdown renderer that consumes it.
@@ -133,7 +138,7 @@ function plainText(post) {
  * file image, which `renderImage` already turned into a `kai-md__photo` and this
  * leaves alone.
  */
-function neutralize(html) {
+function neutralize(html: string): string {
   return html
     // An image that cannot be shown has no text to carry: it renders as
     // nothing, so the body stays pure content. (Solar file images render as
@@ -143,11 +148,8 @@ function neutralize(html) {
     .replace(ANCHOR_CLOSE, '</span>');
 }
 
-/**
- * @param {object} post normalised post
- * @returns {string} HTML for `v-html`
- */
-export function bodyHtml(post) {
+/** HTML for `v-html`. */
+export function bodyHtml(post: PostBody): string {
   const text = plainText(post);
   return neutralize(md.render(text));
 }
@@ -162,11 +164,9 @@ export function bodyHtml(post) {
  * nine lines, 150 of Latin five. `-webkit-line-clamp` cannot help here — it needs
  * `display: -webkit-box`, which Gecko 48 does not have.
  *
- * @param {object} post normalised post
- * @param {number} [budget] width units to keep (a Latin glyph is 1, CJK is 2)
- * @returns {string}
+ * @param budget width units to keep (a Latin glyph is 1, CJK is 2)
  */
-export function excerpt(post, budget = DEFAULT_EXCERPT_UNITS) {
+export function excerpt(post: PostBody, budget: number = DEFAULT_EXCERPT_UNITS): string {
   const isHtml = post.contentType === CONTENT_TYPE_HTML;
   let text = isHtml ? plainText(post) : post.content || '';
 

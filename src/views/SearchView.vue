@@ -37,25 +37,24 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-import { listPosts } from '../api/solian.js';
-import KaiHeader from '../components/KaiHeader.vue';
-import KaiInput from '../components/KaiInput.vue';
-import KaiList from '../components/KaiList.vue';
-import KaiListItem from '../components/KaiListItem.vue';
-import KaiPager from '../components/KaiPager.vue';
-import KaiPostRow from '../components/KaiPostRow.vue';
-import KaiSpinner from '../components/KaiSpinner.vue';
-import { t } from '../kaios/l10n.js';
-import { setBaseSoftkeys } from '../kaios/nav.js';
-import { pop, push } from '../kaios/views.js';
+import { listPosts } from '~/src/api/solian.js';
+import type { Post } from '~/src/api/models.js';
+import KaiHeader from '~/src/components/KaiHeader.vue';
+import KaiInput from '~/src/components/KaiInput.vue';
+import KaiList from '~/src/components/KaiList.vue';
+import KaiListItem from '~/src/components/KaiListItem.vue';
+import KaiPager from '~/src/components/KaiPager.vue';
+import KaiPostRow from '~/src/components/KaiPostRow.vue';
+import KaiSpinner from '~/src/components/KaiSpinner.vue';
+import { t } from '~/src/kaios/l10n.js';
+import { setBaseSoftkeys } from '~/src/kaios/nav.js';
+import { pop, push } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Search takes none.
-defineProps({
-  params: { type: Object, default: () => ({}) },
-});
+withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
 
 // The API caps `take` at 100; 20 rows is already several screens on a 240x320
 // handset.
@@ -64,17 +63,17 @@ const TAKE = 20;
 const query = ref('');
 /** The term the current results came from; `query` is what is being typed. */
 const submitted = ref('');
-const posts = ref([]);
+const posts = ref<Post[]>([]);
 const total = ref(0);
 const page = ref(1);
 const requested = ref(1);
 /** 'idle' (nothing searched yet) | 'loading' | 'ready' | 'error' */
-const status = ref('idle');
+const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
 const loading = computed(() => status.value === 'loading');
 const pages = computed(() => (total.value > 0 ? Math.ceil(total.value / TAKE) : 1));
 
-async function search(target) {
+async function search(target: number): Promise<void> {
   requested.value = target;
   status.value = 'loading';
 
@@ -89,20 +88,20 @@ async function search(target) {
   }
 }
 
-function retry() {
+function retry(): void {
   search(requested.value);
 }
 
 /** Enter commits the field: run the search and leave the platform's text mode. */
-function onSubmit() {
+function onSubmit(): void {
   const term = query.value.trim();
   if (!term) return;
   submitted.value = term;
   page.value = 1;
   search(1);
 
-  const active = document.activeElement;
-  if (active && typeof active.blur === 'function') active.blur();
+  const active = document.activeElement as HTMLElement | null;
+  if (active) active.blur();
 }
 
 onMounted(() => {

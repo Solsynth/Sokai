@@ -96,45 +96,45 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { bodyHtml } from '../content/markdown.js';
-import { formatRelativeTime, postKindKey, visibilityKey } from '../api/models.js';
-import { getPost, listReplies } from '../api/solian.js';
-import KaiAttachmentList from '../components/KaiAttachmentList.vue';
-import KaiHeader from '../components/KaiHeader.vue';
-import KaiList from '../components/KaiList.vue';
-import KaiListItem from '../components/KaiListItem.vue';
-import KaiPager from '../components/KaiPager.vue';
-import KaiPostQuote from '../components/KaiPostQuote.vue';
-import KaiPostRow from '../components/KaiPostRow.vue';
-import KaiSpinner from '../components/KaiSpinner.vue';
-import { t } from '../kaios/l10n.js';
-import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '../kaios/nav.js';
-import { pop, push } from '../kaios/views.js';
+import { bodyHtml } from '~/src/content/markdown.js';
+import { formatRelativeTime, postKindKey, visibilityKey, type Post } from '~/src/api/models.js';
+import { getPost, listReplies } from '~/src/api/solian.js';
+import KaiAttachmentList from '~/src/components/KaiAttachmentList.vue';
+import KaiHeader from '~/src/components/KaiHeader.vue';
+import KaiList from '~/src/components/KaiList.vue';
+import KaiListItem from '~/src/components/KaiListItem.vue';
+import KaiPager from '~/src/components/KaiPager.vue';
+import KaiPostQuote from '~/src/components/KaiPostQuote.vue';
+import KaiPostRow from '~/src/components/KaiPostRow.vue';
+import KaiSpinner from '~/src/components/KaiSpinner.vue';
+import { t } from '~/src/kaios/l10n.js';
+import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
+import { pop, push } from '~/src/kaios/views.js';
 
-const props = defineProps({
-  params: { type: Object, default: () => ({}) },
+const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
+  params: () => ({}),
 });
 
 const TAKE = 20;
 
-const body = ref(null);
+const body = ref<HTMLElement | null>(null);
 const uid = ref(0);
 
-const post = ref(null);
+const post = ref<Post | null>(null);
 /** 'loading' | 'ready' | 'not-found' | 'error' */
-const postStatus = ref('loading');
+const postStatus = ref<'loading' | 'ready' | 'not-found' | 'error'>('loading');
 
-const replies = ref([]);
+const replies = ref<Post[]>([]);
 const repliesTotal = ref(0);
 /** 1-based. The API paginates by offset, so a page is `(page - 1) * TAKE`. */
 const repliesPage = ref(1);
 /** The page being fetched: a failure is retried at this one, not at `repliesPage`. */
 const repliesRequested = ref(1);
 /** 'loading' | 'ready' | 'error' */
-const repliesStatus = ref('loading');
+const repliesStatus = ref<'loading' | 'ready' | 'error'>('loading');
 
 const repliesLoading = computed(() => repliesStatus.value === 'loading');
 const repliesPages = computed(() =>
@@ -151,7 +151,7 @@ const rendered = computed(() => (post.value ? bodyHtml(post.value) : ''));
  * image gets. `v-html` hands Vue no hook for the nodes it inserted, so the
  * listener goes on the element itself.
  */
-function guardPhotos(root) {
+function guardPhotos(root: HTMLElement | null): void {
   if (!root) return;
 
   const images = root.querySelectorAll('img.kai-md__photo');
@@ -179,7 +179,7 @@ const time = computed(() => {
   if (!post.value) return '';
   const relative = formatRelativeTime(post.value.publishedAt);
   if (!relative) return '';
-  return relative.key ? t(relative.key, relative.args) : relative.text;
+  return 'key' in relative ? t(relative.key, relative.args) : relative.text;
 });
 
 const visibility = computed(() => (post.value ? visibilityKey(post.value.visibility) : null));
@@ -194,7 +194,7 @@ const quoteLabelKey = computed(() =>
   post.value && post.value.forwardedFrom ? 'post_forwarded_from' : 'post_replied_to',
 );
 
-async function loadPost() {
+async function loadPost(): Promise<void> {
   post.value = null;
   postStatus.value = 'loading';
 
@@ -203,11 +203,11 @@ async function loadPost() {
     post.value = found;
     postStatus.value = found ? 'ready' : 'not-found';
   } catch (error) {
-    postStatus.value = error && error.status === 404 ? 'not-found' : 'error';
+    postStatus.value = (error as { status?: number }).status === 404 ? 'not-found' : 'error';
   }
 }
 
-async function loadReplies(target) {
+async function loadReplies(target: number): Promise<void> {
   repliesRequested.value = target;
   repliesStatus.value = 'loading';
 
@@ -223,12 +223,12 @@ async function loadReplies(target) {
   }
 }
 
-function retryReplies() {
+function retryReplies(): void {
   loadReplies(repliesRequested.value);
 }
 
 /** Both loaders run at once: neither needs the other's result. */
-function reload() {
+function reload(): void {
   loadPost();
   loadReplies(1);
 }

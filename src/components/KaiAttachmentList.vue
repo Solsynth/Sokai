@@ -2,13 +2,17 @@
   <div class="kai-attachments">
     <template v-for="attachment in shown" :key="attachment.id">
       <!-- A picture is the point of a picture post; the caption under it carries
-           what the row would otherwise have said in text. -->
+           what the row would otherwise have said in text. While the bytes are
+           on the wire, the box shows its BlurHash wash (when the server sent
+           one) behind the still-empty image; the reserved box means nothing
+           moves when the picture lands. -->
       <img
         v-if="attachment.src && !failed[attachment.id]"
         class="kai-attachment__image"
         :src="attachment.src"
         :width="attachment.width"
         :height="attachment.height"
+        :style="attachment.blur ? { backgroundImage: 'url(' + attachment.blur + ')' } : null"
         :alt="attachment.detail"
         @error="fail(attachment.id)"
       />
@@ -29,29 +33,43 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive } from 'vue';
 
-import { attachmentKindKey, describeAttachment } from '../api/models.js';
-import { fileUrl } from '../api/solian.js';
-import { t } from '../kaios/l10n.js';
+import { attachmentKindKey, describeAttachment, type Attachment } from '~/src/api/models.js';
+import { fileUrl } from '~/src/api/solian.js';
+import { placeholderDataUrl } from '~/src/kaios/blur.js';
+import { t } from '~/src/kaios/l10n.js';
 
-const props = defineProps({
-  attachments: { type: Array, required: true },
-  /** Rows render one line and count the rest; `0` renders every attachment. */
-  limit: { type: Number, default: 0 },
-  /** Rows caption their pictures; the detail shows them whole, captionless. */
-  showCaptions: { type: Boolean, default: true },
-});
+const props = withDefaults(
+  defineProps<{
+    attachments: Attachment[];
+    /** Rows render one line and count the rest; `0` renders every attachment. */
+    limit?: number;
+    /** Rows caption their pictures; the detail shows them whole, captionless. */
+    showCaptions?: boolean;
+  }>(),
+  { limit: 0, showCaptions: false },
+);
+
+interface ShownAttachment {
+  id: string;
+  kindKey: string;
+  detail: string;
+  src: string;
+  width: number;
+  height: number;
+  blur: string;
+}
 
 /** id of every attachment whose file failed to load, so its line stands alone. */
-const failed = reactive({});
+const failed = reactive<Record<string, boolean>>({});
 
-function fail(id) {
+function fail(id: string): void {
   failed[id] = true;
 }
 
-const shown = computed(() => {
+const shown = computed<ShownAttachment[]>(() => {
   const list = props.limit > 0 ? props.attachments.slice(0, props.limit) : props.attachments;
   return list.map((attachment) => ({
     id: attachment.id,
@@ -62,6 +80,9 @@ const shown = computed(() => {
     src: attachment.kind === 'image' ? fileUrl(attachment.id) : '',
     width: attachment.width,
     height: attachment.height,
+    // Decoded once per hash and cached: a feed page full of the same picture
+    // pays for the decode once. '' when the server sent no hash.
+    blur: placeholderDataUrl(attachment.blurhash),
   }));
 });
 

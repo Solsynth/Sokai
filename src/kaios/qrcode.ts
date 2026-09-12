@@ -10,7 +10,7 @@ import qrcode from 'qrcode-generator';
  * picks the smallest matrix that fits; error-correction level M is the usual
  * on-screen choice, and the SVG keeps it crisp at any CSS size.
  */
-export function qrDataUrl(text) {
+export function qrDataUrl(text: string): string {
   const qr = qrcode(0, 'M');
   qr.addData(text);
   qr.make();

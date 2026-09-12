@@ -12,19 +12,19 @@
   </li>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { nav, registerSelectable, unregisterSelectable } from '../kaios/nav.js';
+import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
-const props = defineProps({
-  primary: { type: String, required: true },
-  secondary: { type: String, default: '' },
-});
+const props = defineProps<{
+  primary: string;
+  secondary?: string;
+}>();
 
-const emit = defineEmits(['select']);
+const emit = defineEmits<{ select: [] }>();
 
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 const uid = ref(0);
 
 const isSelected = computed(() => uid.value !== 0 && nav.current === uid.value);

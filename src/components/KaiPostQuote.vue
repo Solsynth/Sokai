@@ -17,20 +17,24 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 
-import { bodyHtml, excerpt } from '../content/markdown.js';
-import { t } from '../kaios/l10n.js';
+import { bodyHtml, excerpt } from '~/src/content/markdown.js';
+import { type PostReference } from '~/src/api/models.js';
+import { t } from '~/src/kaios/l10n.js';
 
-const props = defineProps({
-  /** A normalised `repliedTo` / `forwardedFrom` reference. */
-  quote: { type: Object, required: true },
-  /** `post_replied_to` or `post_forwarded_from`. */
-  labelKey: { type: String, required: true },
-  /** Detail screens render markdown; feed rows stay text-only. */
-  rich: { type: Boolean, default: false },
-});
+const props = withDefaults(
+  defineProps<{
+    /** A normalised `repliedTo` / `forwardedFrom` reference. */
+    quote: PostReference;
+    /** `post_replied_to` or `post_forwarded_from`. */
+    labelKey: string;
+    /** Detail screens render markdown; feed rows stay text-only. */
+    rich?: boolean;
+  }>(),
+  { rich: false },
+);
 
 /** A quote is context, not the post: two lines is as much as a row can give it. */
 const QUOTE_UNITS = 48;

@@ -1,11 +1,10 @@
-import { reactive } from 'vue';
-
-import { API_BASE_URL } from '../api/solian.js';
-import { request } from './xhr.js';
+import { API_BASE_URL } from '~/src/api/solian.js';
+import { request } from '~/src/kaios/xhr.js';
+import { useAccountStore, type Account, type AccountProfile } from '~/src/stores/account.js';
 
 /**
- * Session state and the OAuth 2.0 device authorization flow (RFC 8628),
- * mirroring the SolianWatch app's standalone sign-in:
+ * The OAuth 2.0 device authorization flow (RFC 8628), mirroring the
+ * SolianWatch app's standalone sign-in:
  *
  *   POST {base}/stargate/auth/open/device/code   (form: client_id, scope)
  *     -> { device_code, user_code, verification_uri, expires_in, interval }
@@ -33,28 +32,13 @@ import { request } from './xhr.js';
  * (revoked/expired server-side) drops the session back to anonymous rather
  * than leaving a half-authenticated app.
  *
- * `session.js` imports `API_BASE_URL` from `solian.js`, which imports
- * `bearerToken` from here. That cycle is safe: both sides use the other's
- * export only inside functions, never at module-evaluation time.
+ * Everything the views read lives in the Pinia account store
+ * (`~/src/stores/account.ts`); this module keeps the tokens and the flow
+ * private and writes the store. `session.js` imports `API_BASE_URL` from
+ * `solian.ts`, which imports `bearerToken` from here — that cycle is safe:
+ * both sides use the other's export only inside functions, never at
+ * module-evaluation time.
  */
-
-export const session = reactive({
-  /** 'anonymous' | 'signing-in' | 'signed-in' */
-  phase: 'anonymous',
-  /** The code to type on the approving device, while `phase === 'signing-in'`. */
-  userCode: '',
-  /** The page to open on that device; the code is entered there. */
-  verificationUri: '',
-  /** The verification page with the code prefilled, when the server sent it —
-   *  the QR code's payload, so scanning needs no typing. */
-  verificationUriComplete: '',
-  /** True while a poll is in flight waiting for approval. */
-  waiting: false,
-  /** l10n key for the last sign-in failure; '' when the flow is healthy. */
-  errorKey: '',
-  /** Cached identity: { id, name, nick, display }; null when not signed in. */
-  account: null,
-});
 
 const CLIENT_ID = 'solian-on-watch';
 /** The watch's client allows `["*"]` and the server matches scopes exactly. */
@@ -64,8 +48,8 @@ const STORAGE_KEY = 'sokai.session';
 const REFRESH_BEFORE_MS = 60000;
 const DEFAULT_EXPIRES_S = 600;
 
-let accessToken = null;
-let refreshToken = null;
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
 /** Epoch milliseconds at which `accessToken` expires. */
 let expiresAt = 0;
 /**
@@ -74,9 +58,37 @@ let expiresAt = 0;
  */
 let pollGeneration = 0;
 
+interface StoredSession {
+  accessToken?: unknown;
+  refreshToken?: unknown;
+  expiresAt?: unknown;
+  account?: unknown;
+}
+
+interface DeviceCode {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
+  expiresIn: number;
+  interval: number;
+}
+
+interface TokenPair {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresIn: number;
+}
+
+/** The flow's own failure shape: an l10n key, or a Stargate `error` code. */
+interface FlowError extends Error {
+  pollKey?: string;
+  error?: string;
+}
+
 // ---- Storage ---------------------------------------------------------------
 
-function storage() {
+function storage(): Storage | null {
   try {
     return window.localStorage;
   } catch (error) {
@@ -84,12 +96,18 @@ function storage() {
   }
 }
 
-function loadStoredSession() {
+/**
+ * Restores a stored session into the account store. Called by `main.ts` after
+ * Pinia is installed — the store needs an active Pinia, which module
+ * evaluation time does not have.
+ */
+export function initSession(): void {
+  const account = useAccountStore();
   const store = storage();
   if (!store) return;
-  let raw = null;
+  let raw: StoredSession | null = null;
   try {
-    raw = JSON.parse(store.getItem(STORAGE_KEY) || 'null');
+    raw = JSON.parse(store.getItem(STORAGE_KEY) || 'null') as StoredSession | null;
   } catch (error) {
     raw = null;
   }
@@ -100,18 +118,18 @@ function loadStoredSession() {
   expiresAt = typeof raw.expiresAt === 'number' ? raw.expiresAt : 0;
   // Optimistic: the cached identity renders immediately; a dead token is
   // discovered lazily by the first `bearerToken()` refresh.
-  session.phase = 'signed-in';
-  session.account = raw.account && typeof raw.account === 'object' ? raw.account : null;
+  account.phase = 'signed-in';
+  account.account = raw.account && typeof raw.account === 'object' ? (raw.account as Account) : null;
 }
 
-function saveSession() {
+function saveSession(): void {
   const store = storage();
   if (!store) return;
-  const record = {
-    accessToken: accessToken,
-    refreshToken: refreshToken,
+  const record: StoredSession = {
+    accessToken: accessToken as string | undefined,
+    refreshToken: refreshToken as string | undefined,
     expiresAt: expiresAt,
-    account: session.account,
+    account: useAccountStore().account,
   };
   try {
     store.setItem(STORAGE_KEY, JSON.stringify(record));
@@ -120,7 +138,7 @@ function saveSession() {
   }
 }
 
-function clearStoredSession() {
+function clearStoredSession(): void {
   const store = storage();
   if (!store) return;
   try {
@@ -140,10 +158,8 @@ function clearStoredSession() {
  * A refresh rejected as `invalid_grant` means the session is dead server-side:
  * it is dropped and `null` returned. Any other refresh failure is transient, so
  * the cached token is sent anyway and the request surfaces the outcome itself.
- *
- * @returns {Promise<string|null>}
  */
-export async function bearerToken() {
+export async function bearerToken(): Promise<string | null> {
   if (!accessToken) return null;
   if (expiresAt - Date.now() > REFRESH_BEFORE_MS) return accessToken;
   if (!refreshToken) return accessToken;
@@ -153,7 +169,7 @@ export async function bearerToken() {
     storePair(pair);
     return accessToken;
   } catch (error) {
-    if (error && error.error === 'invalid_grant') {
+    if (error && (error as FlowError).error === 'invalid_grant') {
       dropSession();
       return null;
     }
@@ -161,7 +177,7 @@ export async function bearerToken() {
   }
 }
 
-function storePair(pair) {
+function storePair(pair: TokenPair): void {
   accessToken = pair.accessToken;
   // Stargate may rotate the refresh token or omit it; keep the previous one
   // when a response does not carry a replacement.
@@ -170,17 +186,12 @@ function storePair(pair) {
   saveSession();
 }
 
-function dropSession() {
+function dropSession(): void {
   pollGeneration += 1;
   accessToken = null;
   refreshToken = null;
   expiresAt = 0;
-  session.phase = 'anonymous';
-  session.waiting = false;
-  session.errorKey = '';
-  session.userCode = '';
-  session.verificationUri = '';
-  session.account = null;
+  useAccountStore().reset();
   clearStoredSession();
 }
 
@@ -189,44 +200,44 @@ function dropSession() {
 /**
  * Starts (or restarts) sign-in: asks Stargate for a device code and polls the
  * token endpoint until the user approves on another device. Terminal failures
- * land in `session.errorKey` as an l10n key; the view offers a retry.
+ * land in the store's `errorKey` as an l10n key; the view offers a retry.
  */
-export async function startSignIn() {
-  if (session.phase === 'signing-in') cancelSignIn();
+export async function startSignIn(): Promise<void> {
+  const account = useAccountStore();
+  if (account.phase === 'signing-in') cancelSignIn();
   const generation = ++pollGeneration;
 
-    session.phase = 'signing-in';
-    session.waiting = false;
-    session.errorKey = '';
-    session.userCode = '';
-    session.verificationUri = '';
-    session.verificationUriComplete = '';
+  account.phase = 'signing-in';
+  account.waiting = false;
+  account.errorKey = '';
+  account.userCode = '';
+  account.verificationUri = '';
+  account.verificationUriComplete = '';
 
   try {
     const code = await requestDeviceCode();
     if (generation !== pollGeneration) return;
-    session.userCode = code.userCode;
-    session.verificationUri = code.verificationUri;
-    session.verificationUriComplete = code.verificationUriComplete || '';
-    session.waiting = true;
+    account.userCode = code.userCode;
+    account.verificationUri = code.verificationUri;
+    account.verificationUriComplete = code.verificationUriComplete || '';
+    account.waiting = true;
     await poll(code, generation);
   } catch (error) {
     if (generation !== pollGeneration) return;
-    session.waiting = false;
-    session.errorKey = error && typeof error.pollKey === 'string' ? error.pollKey : 'error_load_failed';
+    account.waiting = false;
+    account.errorKey =
+      error && typeof (error as FlowError).pollKey === 'string'
+        ? (error as FlowError).pollKey as string
+        : 'error_load_failed';
   }
 }
 
 /** Cancels an in-flight sign-in (the Cancel softkey, or leaving the screen). */
-export function cancelSignIn() {
-  if (session.phase !== 'signing-in') return;
+export function cancelSignIn(): void {
+  const account = useAccountStore();
+  if (account.phase !== 'signing-in') return;
   pollGeneration += 1;
-  session.phase = 'anonymous';
-  session.waiting = false;
-  session.errorKey = '';
-  session.userCode = '';
-  session.verificationUri = '';
-  session.verificationUriComplete = '';
+  account.reset();
 }
 
 /**
@@ -234,14 +245,14 @@ export function cancelSignIn() {
  * failure only means the session outlives this device) and drops every local
  * trace so the next sign-in starts clean.
  */
-export function signOut() {
+export function signOut(): void {
   const token = accessToken;
   dropSession();
   if (token) {
     request(API_BASE_URL + '/stargate/sessions/current', {
       method: 'DELETE',
       headers: { Accept: 'application/json', Authorization: 'Bearer ' + token },
-    }).catch(function () {
+    }).catch(() => {
       // Best effort: local sign-out already happened.
     });
   }
@@ -249,15 +260,13 @@ export function signOut() {
 
 // ---- Flow internals --------------------------------------------------------
 
-function form(pairs) {
+function form(pairs: Array<[string, string]>): string {
   return pairs
-    .map(function (pair) {
-      return encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]);
-    })
+    .map((pair) => encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]))
     .join('&');
 }
 
-function formOptions(body) {
+function formOptions(body: string): { method: string; headers: Record<string, string>; body: string } {
   return {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -265,14 +274,14 @@ function formOptions(body) {
   };
 }
 
-async function requestDeviceCode() {
+async function requestDeviceCode(): Promise<DeviceCode> {
   const response = await request(
     API_BASE_URL + '/stargate/auth/open/device/code',
     formOptions(form([['client_id', CLIENT_ID], ['scope', SCOPE]])),
   );
-  const data = response.data;
+  const data = response.data as Record<string, unknown> | null;
   if (!data || typeof data.device_code !== 'string' || typeof data.user_code !== 'string') {
-    const error = new Error('Invalid device response');
+    const error = new Error('Invalid device response') as FlowError;
     error.pollKey = 'error_load_failed';
     throw error;
   }
@@ -292,7 +301,7 @@ async function requestDeviceCode() {
  * `slow_down` lengthens the interval by five seconds, and the terminal errors
  * (`access_denied`, `expired_token`, `invalid_grant`) end the flow.
  */
-async function poll(code, generation) {
+async function poll(code: DeviceCode, generation: number): Promise<void> {
   const deadline = Date.now() + code.expiresIn * 1000;
   let delayMs = Math.max(code.interval, 1) * 1000;
 
@@ -300,12 +309,12 @@ async function poll(code, generation) {
     await sleep(delayMs);
     if (generation !== pollGeneration) return;
 
-    let pair;
+    let pair: TokenPair;
     try {
       pair = await exchange(code.deviceCode);
     } catch (error) {
       if (generation !== pollGeneration) return;
-      switch (error && error.error) {
+      switch ((error as FlowError).error) {
         case 'authorization_pending':
           continue;
         case 'slow_down':
@@ -323,30 +332,31 @@ async function poll(code, generation) {
 
     if (generation !== pollGeneration) return;
     storePair(pair);
-    session.waiting = false;
+    const account = useAccountStore();
+    account.waiting = false;
     // The identity is a nice-to-have; a failed profile fetch keeps the session.
     await loadProfile(generation);
     if (generation !== pollGeneration) return;
-    session.phase = 'signed-in';
+    account.phase = 'signed-in';
     return;
   }
 
   throw pollFailure('account_expired');
 }
 
-function pollFailure(key) {
-  const error = new Error(key);
+function pollFailure(key: string): FlowError {
+  const error = new Error(key) as FlowError;
   error.pollKey = key;
   return error;
 }
 
-function sleep(ms) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, ms);
-  });
+function sleep(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
 }
 
-async function exchange(deviceCode) {
+async function exchange(deviceCode: string): Promise<TokenPair> {
   const response = await request(
     API_BASE_URL + '/stargate/auth/open/token',
     formOptions(
@@ -360,7 +370,7 @@ async function exchange(deviceCode) {
   return parseTokenResponse(response.data);
 }
 
-async function refresh(token) {
+async function refresh(token: string): Promise<TokenPair> {
   const response = await request(
     API_BASE_URL + '/stargate/auth/open/token',
     formOptions(form([['grant_type', 'refresh_token'], ['client_id', CLIENT_ID], ['refresh_token', token]])),
@@ -368,43 +378,47 @@ async function refresh(token) {
   return parseTokenResponse(response.data);
 }
 
-function parseTokenResponse(data) {
-  if (!data || typeof data.access_token !== 'string') {
-    const error = new Error('Invalid token response');
+function parseTokenResponse(data: unknown): TokenPair {
+  const source = data as Record<string, unknown> | null;
+  if (!source || typeof source.access_token !== 'string') {
+    const error = new Error('Invalid token response') as FlowError;
     error.error = 'invalid_response';
     throw error;
   }
   return {
-    accessToken: data.access_token,
-    refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : null,
-    expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 300,
+    accessToken: source.access_token,
+    refreshToken: typeof source.refresh_token === 'string' ? source.refresh_token : null,
+    expiresIn: typeof source.expires_in === 'number' ? source.expires_in : 300,
   };
 }
 
-async function loadProfile(generation) {
+async function loadProfile(generation: number): Promise<void> {
   try {
     const response = await request(API_BASE_URL + '/stargate/accounts/me', {
       headers: { Accept: 'application/json', Authorization: 'Bearer ' + accessToken },
     });
     const account = normalizeAccount(response.data);
     if (generation !== pollGeneration || !account) return;
-    session.account = account;
+    useAccountStore().account = account;
     saveSession();
   } catch (error) {
     // Best effort: the token is valid even if the profile fetch is not.
   }
 }
 
-function normalizeAccount(raw) {
-  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
-  const name = typeof raw.name === 'string' ? raw.name : '';
-  const nick = typeof raw.nick === 'string' ? raw.nick : '';
+function normalizeAccount(raw: unknown): Account | null {
+  const source = raw as Record<string, unknown> | null;
+  if (!source || typeof source !== 'object' || typeof source.id !== 'string') return null;
+  const name = typeof source.name === 'string' ? source.name : '';
+  const nick = typeof source.nick === 'string' ? source.nick : '';
   return {
-    id: raw.id,
+    id: source.id,
     name: name,
     nick: nick,
     display: nick || name,
+    // The banner is optional: keep whatever profile object the server sent
+    // (`null` when there is none — the signed-in screen guards on it).
+    profile:
+      source.profile && typeof source.profile === 'object' ? (source.profile as AccountProfile) : null,
   };
 }
-
-loadStoredSession();

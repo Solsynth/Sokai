@@ -5,7 +5,11 @@ import { transformAsync } from '@babel/core';
 
 import { legacyBabelOptions } from './babel-legacy.js';
 
-const JS_ID = /\.(m?js|vue)$/;
+// `.vue` arrives here already compiled to JS by plugin-vue; `.ts` modules
+// arrive with their types intact and are stripped by the TypeScript preset in
+// the same Babel pass (see babel-legacy.js) — which is what lets the core-js
+// polyfill provider see the module's real API usage before the bundler runs.
+const JS_ID = /\.(m?js|vue|ts)$/;
 
 // core-js is the polyfill library itself: injecting polyfills into it is
 // pointless. It is also actively harmful — the injected `import` statements

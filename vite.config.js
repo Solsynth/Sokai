@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
@@ -9,8 +10,18 @@ import { KAIOS_ESBUILD_TARGET, TARGET_LABEL } from './scripts/target.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
+/** The repository root, as the `~/` import alias. */
+const PROJECT_ROOT = fileURLToPath(new URL('.', import.meta.url));
+
 export default defineConfig({
   plugins: [vue(), kaiosLegacy(), kaiosHtml()],
+
+  resolve: {
+    // `~/` → the project root, so `import { x } from '~/src/...'` is a path
+    // every module agrees on. Resolved by Vite for both the dev server and
+    // the build; vue-tsc knows it through tsconfig `paths`.
+    alias: { '~': PROJECT_ROOT },
+  },
 
   // Relative asset URLs. On a device the app is served from its own origin root,
   // so `./js/app.js` resolves exactly like `/js/app.js`; off-device it means the

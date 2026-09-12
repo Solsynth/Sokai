@@ -1,4 +1,4 @@
-import { computed, nextTick, reactive, shallowRef } from 'vue';
+import { computed, nextTick, reactive, shallowRef, type Ref } from 'vue';
 
 /**
  * D-pad navigation and softkey state.
@@ -24,15 +24,37 @@ export const nav = reactive({
 let nextUid = 0;
 let refreshScheduled = false;
 
-/**
- * @type {Array<{ uid: number, el: object, onEnter: Function|null, scrollFirst: boolean }>}
- */
-const registry = [];
+interface SelectableEntry {
+  uid: number;
+  /** A template ref: `el.value` is the element once the component has mounted. */
+  el: Ref<HTMLElement | null>;
+  onEnter: (() => void) | null;
+  /** A tall element — a post body — keeps the arrow keys until scrolled to its end. */
+  scrollFirst: boolean;
+  /** Eligible for the highlight when a screen mounts: primary content marks itself. */
+  initial: boolean;
+}
+
+const registry: SelectableEntry[] = [];
 
 const DOCUMENT_POSITION_PRECEDING = 0x02;
 const DOCUMENT_POSITION_FOLLOWING = 0x04;
 
-function emptyBase() {
+interface SoftkeySpec {
+  label?: string;
+  onPress?: (() => void) | null;
+}
+
+type SoftkeySide = 'left' | 'center' | 'right';
+
+interface Softkey {
+  label: string;
+  onPress: (() => void) | null;
+}
+
+type SoftkeyFactory = () => Partial<Record<SoftkeySide, SoftkeySpec>>;
+
+function emptyBase(): Record<SoftkeySide, SoftkeySpec> {
   return {
     left: { label: '', onPress: null },
     center: { label: '' },
@@ -40,18 +62,19 @@ function emptyBase() {
   };
 }
 
-const baseFactory = shallowRef(emptyBase);
+const baseFactory = shallowRef<SoftkeyFactory>(emptyBase);
 
-function isLive(entry) {
+function isLive(entry: SelectableEntry): boolean {
   const node = entry.el.value;
+  if (!node) return false;
   // `isConnected` is FF53+; parentNode is enough for a mounted node.
-  return Boolean(node) && Boolean(node.parentNode || node === document.documentElement);
+  return Boolean(node.parentNode || node === document.documentElement);
 }
 
-function inDocumentOrder(a, b) {
+function inDocumentOrder(a: SelectableEntry, b: SelectableEntry): number {
   const x = a.el.value;
   const y = b.el.value;
-  if (x === y) return 0;
+  if (!x || !y || x === y) return 0;
 
   const position = x.compareDocumentPosition(y);
   if (position & DOCUMENT_POSITION_FOLLOWING) return -1;
@@ -59,11 +82,11 @@ function inDocumentOrder(a, b) {
   return 0;
 }
 
-function ordered() {
+function ordered(): SelectableEntry[] {
   return registry.filter(isLive).sort(inDocumentOrder);
 }
 
-function select(entry) {
+function select(entry: SelectableEntry): void {
   nav.current = entry.uid;
 
   const node = entry.el.value;
@@ -86,7 +109,7 @@ function select(entry) {
  * region (`.kai-content`, the layout contract `scrollContent` also relies on),
  * so "nearest" is computed against it.
  */
-function scrollIntoViewNearest(node) {
+function scrollIntoViewNearest(node: HTMLElement): void {
   const scroller = document.querySelector('.kai-content');
   if (!scroller) {
     if (typeof node.scrollIntoView === 'function') node.scrollIntoView(true);
@@ -105,7 +128,7 @@ function scrollIntoViewNearest(node) {
   }
 }
 
-function scheduleRefresh() {
+function scheduleRefresh(): void {
   if (refreshScheduled) return;
   refreshScheduled = true;
   // Registration happens during mount, before template refs are assigned and
@@ -116,7 +139,7 @@ function scheduleRefresh() {
   });
 }
 
-function refresh() {
+function refresh(): void {
   nav.revision += 1;
 
   const list = ordered();
@@ -134,21 +157,30 @@ function refresh() {
 }
 
 /**
- * @param {{ el: object, onEnter?: Function|null, scrollFirst?: boolean, initial?: boolean }} entry
- *   `el` is a template ref. `scrollFirst` gives a tall element — a post body —
+ * @param el a template ref. `scrollFirst` gives a tall element — a post body —
  *   the arrow keys until it has been scrolled to its end. `initial` makes the
  *   element eligible for the highlight when a screen mounts: primary content
  *   marks itself, chrome such as pager rows does not.
- * @returns {number} uid to pass back to `unregisterSelectable`
+ * @returns uid to pass back to `unregisterSelectable`
  */
-export function registerSelectable({ el, onEnter = null, scrollFirst = false, initial = false }) {
-  const entry = { uid: ++nextUid, el, onEnter, scrollFirst, initial };
+export function registerSelectable({
+  el,
+  onEnter = null,
+  scrollFirst = false,
+  initial = false,
+}: {
+  el: Ref<HTMLElement | null>;
+  onEnter?: (() => void) | null;
+  scrollFirst?: boolean;
+  initial?: boolean;
+}): number {
+  const entry: SelectableEntry = { uid: ++nextUid, el, onEnter, scrollFirst, initial };
   registry.push(entry);
   scheduleRefresh();
   return entry.uid;
 }
 
-export function unregisterSelectable(uid) {
+export function unregisterSelectable(uid: number): void {
   const index = registry.findIndex((entry) => entry.uid === uid);
   if (index !== -1) registry.splice(index, 1);
   scheduleRefresh();
@@ -164,7 +196,7 @@ const SCROLL_STEP_PX = 40;
  * unreachable. `.kai-content` is the layout contract documented in
  * `src/styles/kaios.css`.
  */
-function scrollContent(delta) {
+function scrollContent(delta: number): void {
   const scroller = document.querySelector('.kai-content');
   if (!scroller) return;
   scroller.scrollTop += delta * SCROLL_STEP_PX;
@@ -172,11 +204,10 @@ function scrollContent(delta) {
 
 /**
  * One step of scrolling, clamped to the region's extent.
- * @param {number} delta
- * @returns {boolean} whether the region moved — this is what decides if a
- *   `scrollFirst` element consumed the press
+ * @returns whether the region moved — this is what decides if a `scrollFirst`
+ *   element consumed the press
  */
-function scrollClamped(delta) {
+function scrollClamped(delta: number): boolean {
   const scroller = document.querySelector('.kai-content');
   if (!scroller) return false;
 
@@ -197,7 +228,7 @@ function scrollClamped(delta) {
  * has been scrolled to its end: a post body taller than the screen is otherwise
  * unreachable, because the highlight would leave it on the first DOWN press.
  */
-export function move(delta) {
+export function move(delta: number): void {
   const list = ordered();
 
   if (list.length < 2) {
@@ -221,13 +252,12 @@ const currentEntry = computed(() => {
 
 /**
  * Softkey bar contents. `center` always activates the highlighted item, so
- * views only choose the label.
- *
- * @param {() => { left?: object, center?: object, right?: object }} factory
- *   Called on every recompute, so labels derived from `t()` stay current when
- *   the locale changes.
+ * views only choose the label. Called on every recompute, so labels derived
+ * from `t()` stay current when the locale changes.
  */
-export function setBaseSoftkeys(factory) {
+export function setBaseSoftkeys(
+  factory: SoftkeyFactory | Partial<Record<SoftkeySide, SoftkeySpec>>,
+): void {
   baseFactory.value = typeof factory === 'function' ? factory : () => factory;
   nav.revision += 1;
 }
@@ -245,17 +275,17 @@ export const softkeys = computed(() => {
       onPress: activate,
     },
     right: base.right || { label: '', onPress: null },
-  };
+  } as Record<SoftkeySide, Softkey>;
 });
 
 /** Runs the highlighted item's action (centre software key). */
-export function activate() {
+export function activate(): void {
   const entry = currentEntry.value;
   if (entry && typeof entry.onEnter === 'function') entry.onEnter();
 }
 
 /** Runs the press handler of a side softkey. */
-export function press(side) {
+export function press(side: SoftkeySide): void {
   const key = softkeys.value[side];
   if (key && typeof key.onPress === 'function') key.onPress();
 }

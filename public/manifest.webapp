@@ -3,7 +3,7 @@
   "name": "Sokai",
   "description": "The Solar Network app for KaiOS. The Sekai of Solar Network, S(e)okai.",
   "launch_path": "/index.html",
-  "theme_color": "#7577ba",
+  "theme_color": "#5e6a9e",
   "icons": {
     "16": "/img/icons/icon16x16.png",
     "48": "/img/icons/icon48x48.png",

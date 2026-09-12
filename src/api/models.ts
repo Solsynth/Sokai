@@ -13,44 +13,126 @@ const MINUTE_MS = 60000;
 const HOUR_MS = 3600000;
 const DAY_MS = 86400000;
 
-function objectOrEmpty(value) {
-  return value && typeof value === 'object' ? value : {};
+/**
+ * The wire is untyped JSON; every field below is narrowed by a runtime guard
+ * before it is trusted. `RawRecord` keeps those guards the single source of
+ * truth instead of spreading `as` casts through the normalisers.
+ */
+type RawRecord = Record<string, any>;
+
+export interface Author {
+  name: string;
+  nick: string | null;
+  display: string;
 }
 
-function normalizeAuthor(raw) {
-  const publisher = objectOrEmpty(raw);
-  const name = typeof publisher.name === 'string' ? publisher.name : '';
-  const nick = typeof publisher.nick === 'string' ? publisher.nick : '';
-
-  return { name, nick: nick || null, display: nick || name };
+export interface Attachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  kind: AttachmentKind;
+  size: number;
+  width: number;
+  height: number;
+  /** The server sends a BlurHash on some image attachments; '' is the common case. */
+  blurhash: string;
 }
 
 /**
  * An embedded `replied_post` / `forwarded_post`, flattened to what a quote block
  * can show. Never recursed past one level: those structures nest.
  */
-function normalizeReference(raw) {
-  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+export interface PostReference {
+  id: string;
+  author: Author;
+  title: string | null;
+  content: string;
+  /** 0 = markdown, 1 = html. */
+  contentType: number;
+  publishedAt: string | null;
+  isTruncated: boolean;
+  attachments: Attachment[];
+}
+
+export interface PostCounts {
+  replies: number;
+  boosts: number;
+  reactions: number;
+  upvotes: number;
+  downvotes: number;
+  views: number;
+}
+
+export interface Post {
+  id: string;
+  slug: string | null;
+  title: string | null;
+  description: string | null;
+  content: string;
+  /** 0 = markdown, 1 = html. */
+  contentType: number;
+  /** 0 = moment, 1 = article, 2 = blog. */
+  kind: number;
+  /** 0 = public, 1 = friends, 2 = unlisted, 3 = private, … */
+  visibility: number;
+  publishedAt: string | null;
+  editedAt: string | null;
+  isTruncated: boolean;
+  counts: PostCounts;
+  reactions: Record<string, number>;
+  tags: string[];
+  attachments: Attachment[];
+  author: Author;
+  repliedTo: PostReference | null;
+  forwardedFrom: PostReference | null;
+}
+
+/** A countdown label: a string-table key and the numbers it is handed. */
+export interface Label {
+  key: string;
+  args?: Record<string, number>;
+}
+
+export interface Countdown {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string | null;
+  isOngoing: boolean;
+}
+
+function normalizeAuthor(raw: unknown): Author {
+  const publisher = raw && typeof raw === 'object' ? (raw as RawRecord) : {};
+  const name = typeof publisher.name === 'string' ? publisher.name : '';
+  const nick = typeof publisher.nick === 'string' ? publisher.nick : '';
+
+  return { name, nick: nick || null, display: nick || name };
+}
+
+function normalizeReference(raw: unknown): PostReference | null {
+  if (!raw || typeof raw !== 'object' || !(raw as RawRecord).id) return null;
+  const source = raw as RawRecord;
+
   return {
-    id: String(raw.id),
-    author: normalizeAuthor(raw.publisher),
-    title: raw.title || null,
-    content: typeof raw.content === 'string' ? raw.content : '',
+    id: String(source.id),
+    author: normalizeAuthor(source.publisher),
+    title: source.title || null,
+    content: typeof source.content === 'string' ? source.content : '',
     /** 0 = markdown, 1 = html. */
-    contentType: raw.content_type || 0,
-    publishedAt: raw.published_at || raw.created_at || null,
-    isTruncated: Boolean(raw.is_truncated),
-    attachments: normalizeAttachments(raw.attachments),
+    contentType: source.content_type || 0,
+    publishedAt: source.published_at || source.created_at || null,
+    isTruncated: Boolean(source.is_truncated),
+    attachments: normalizeAttachments(source.attachments),
   };
 }
 
-function normalizeTags(raw) {
+function normalizeTags(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
 
-  const tags = [];
+  const tags: string[] = [];
   for (let index = 0; index < raw.length; index += 1) {
     const tag = raw[index];
-    const name = tag && typeof tag === 'object' ? tag.name : null;
+    const name = tag && typeof tag === 'object' ? (tag as RawRecord).name : null;
     if (typeof name === 'string' && name) tags.push(name);
   }
 
@@ -65,33 +147,30 @@ const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ic
 const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogv', 'mov', 'mkv', 'avi', 'flv', 'm4v', '3gp'];
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma', 'opus'];
 
-const KIND_KEYS = {
+const KIND_KEYS: Record<AttachmentKind, string> = {
   image: 'post_attach_image',
   video: 'post_attach_video',
   audio: 'post_attach_audio',
   file: 'post_attach_file',
 };
 
-function extensionOf(name) {
+export type AttachmentKind = 'image' | 'video' | 'audio' | 'file';
+
+function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
 }
 
-function startsWith(value, prefix) {
-  return value.slice(0, prefix.length) === prefix;
-}
-
 /**
- * @param {string} mimeType
- * @param {string} name
- * @returns {'image'|'video'|'audio'|'file'}
+ * @param mimeType may be '' — the API leaves it empty on some files
+ * @param name the extension covers what `mime_type` does not
  */
-export function attachmentKind(mimeType, name) {
+export function attachmentKind(mimeType: string, name: string): AttachmentKind {
   const mime = typeof mimeType === 'string' ? mimeType : '';
   if (mime) {
-    if (startsWith(mime, 'image/')) return 'image';
-    if (startsWith(mime, 'video/')) return 'video';
-    if (startsWith(mime, 'audio/')) return 'audio';
+    if (mime.slice(0, 6) === 'image/') return 'image';
+    if (mime.slice(0, 6) === 'video/') return 'video';
+    if (mime.slice(0, 6) === 'audio/') return 'audio';
     return 'file';
   }
 
@@ -102,11 +181,8 @@ export function attachmentKind(mimeType, name) {
   return 'file';
 }
 
-/**
- * @param {string} kind from `attachmentKind`
- * @returns {string} string-table key for the row's `[image]` marker
- */
-export function attachmentKindKey(kind) {
+/** String-table key for the row's `[image]` marker. */
+export function attachmentKindKey(kind: AttachmentKind): string {
   return KIND_KEYS[kind] || 'post_attach_file';
 }
 
@@ -114,7 +190,7 @@ const KILOBYTE = 1024;
 const MEGABYTE = 1048576;
 
 /** Locale-neutral on purpose: `Intl` is not worth its bytes on Gecko 48. */
-function formatBytes(size) {
+function formatBytes(size: number): string {
   if (typeof size !== 'number' || size <= 0) return '';
   if (size < KILOBYTE) return size + ' B';
   if (size < MEGABYTE) {
@@ -131,12 +207,9 @@ const NAME_BUDGET = 22;
  * One line of attachment metadata for a 240px row: pixel dimensions for media
  * (the file name is a `image_picker_<uuid>.jpg` on the wire), the name for
  * anything else, and the size.
- *
- * @param {object} attachment normalised attachment
- * @returns {string}
  */
-export function describeAttachment(attachment) {
-  const parts = [];
+export function describeAttachment(attachment: Attachment): string {
+  const parts: string[] = [];
   const isMedia = attachment.kind === 'image' || attachment.kind === 'video';
 
   if (isMedia && attachment.width && attachment.height) {
@@ -164,39 +237,36 @@ export function describeAttachment(attachment) {
  * renders this metadata instead, which is also why the detail screen does not
  * embed images.
  */
-function normalizeAttachment(raw) {
-  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+function normalizeAttachment(raw: unknown): Attachment | null {
+  if (!raw || typeof raw !== 'object' || !(raw as RawRecord).id) return null;
+  const source = raw as RawRecord;
 
-  const name = typeof raw.name === 'string' ? raw.name : '';
-  const mimeType = typeof raw.mime_type === 'string' ? raw.mime_type : '';
+  const name = typeof source.name === 'string' ? source.name : '';
+  const mimeType = typeof source.mime_type === 'string' ? source.mime_type : '';
 
   return {
-    id: String(raw.id),
+    id: String(source.id),
     name,
     mimeType,
     kind: attachmentKind(mimeType, name),
-    size: typeof raw.size === 'number' && raw.size > 0 ? raw.size : 0,
-    width: raw.width || 0,
-    height: raw.height || 0,
+    size: typeof source.size === 'number' && source.size > 0 ? source.size : 0,
+    width: source.width || 0,
+    height: source.height || 0,
+    blurhash: typeof source.blurhash === 'string' && source.blurhash ? source.blurhash : '',
   };
 }
 
-/**
- * @param {unknown} raw
- * @returns {Array<object>} drops anything without an id
- */
-function normalizeAttachments(raw) {
+/** Drops anything without an id. */
+function normalizeAttachments(raw: unknown): Attachment[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map(normalizeAttachment).filter(Boolean);
+  return raw.map(normalizeAttachment).filter((item): item is Attachment => item !== null);
 }
 
 /**
  * Post kind (`type` on the wire) → string-table key. A moment is the default and
  * needs no label; an unknown enum renders as nothing rather than as a number.
- * @param {number} kind
- * @returns {string|null}
  */
-export function postKindKey(kind) {
+export function postKindKey(kind: number): string | null {
   switch (kind) {
     case 1:
       return 'post_kind_article';
@@ -213,44 +283,34 @@ export function postKindKey(kind) {
  * An event from `/passport/accounts/{name}/calendar/countdown`, cut down to a
  * one-line countdown. `is_ongoing` is the server's own answer and is trusted over
  * re-deriving it from the clock.
- *
- * @param {object} raw
- * @returns {object|null}
  */
-export function normalizeCountdown(raw) {
+export function normalizeCountdown(raw: unknown): Countdown | null {
   if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
 
-  const title = typeof raw.title === 'string' ? raw.title : '';
-  const startTime = raw.start_time || null;
+  const title = typeof source.title === 'string' ? source.title : '';
+  const startTime = source.start_time || null;
   if (!title || !startTime) return null;
 
   return {
-    id: raw.event_id ? String(raw.event_id) : title + '@' + startTime,
+    id: source.event_id ? String(source.event_id) : title + '@' + startTime,
     title,
     startTime,
-    endTime: raw.end_time || null,
-    isOngoing: Boolean(raw.is_ongoing),
+    endTime: source.end_time || null,
+    isOngoing: Boolean(source.is_ongoing),
   };
 }
 
-/**
- * @param {unknown} raw
- * @returns {Array<object>}
- */
-export function normalizeCountdownList(raw) {
+export function normalizeCountdownList(raw: unknown): Countdown[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map(normalizeCountdown).filter(Boolean);
+  return raw.map(normalizeCountdown).filter((item): item is Countdown => item !== null);
 }
 
 /**
  * How far away an event is, as a string-table key and its arguments. The
  * view formats it, so the wording stays in the string table.
- *
- * @param {object} event normalised countdown
- * @param {number} [now]
- * @returns {{ key: string, args?: object } | null}
  */
-export function countdownLabel(event, now = Date.now()) {
+export function countdownLabel(event: Countdown, now: number = Date.now()): Label | null {
   if (event.isOngoing) return { key: 'countdown_ongoing' };
 
   const at = Date.parse(event.startTime);
@@ -276,72 +336,65 @@ export function countdownLabel(event, now = Date.now()) {
   return { key: 'countdown_minutes', args: { m: Math.max(1, Math.floor(remaining / MINUTE_MS)) } };
 }
 
-/**
- * @param {object} raw
- * @returns {object|null} `null` when `raw` is not a post, so callers can filter
- */
-export function normalizePost(raw) {
-  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+/** `null` when `raw` is not a post, so callers can filter. */
+export function normalizePost(raw: unknown): Post | null {
+  if (!raw || typeof raw !== 'object' || !(raw as RawRecord).id) return null;
+  const source = raw as RawRecord;
 
-  const reactions = {};
-  const rawReactions = objectOrEmpty(raw.reactions_count);
+  const reactions: Record<string, number> = {};
+  const rawReactions =
+    source.reactions_count && typeof source.reactions_count === 'object'
+      ? (source.reactions_count as RawRecord)
+      : {};
   const symbols = Object.keys(rawReactions);
   for (let index = 0; index < symbols.length; index += 1) {
     reactions[symbols[index]] = rawReactions[symbols[index]];
   }
 
   return {
-    id: String(raw.id),
-    slug: raw.slug || null,
-    title: raw.title || null,
-    description: raw.description || null,
-    content: typeof raw.content === 'string' ? raw.content : '',
-    /** 0 = markdown, 1 = html. */
-    contentType: raw.content_type || 0,
-    /** 0 = moment, 1 = article, 2 = blog. */
-    kind: raw.type || 0,
-    /** 0 = public, 1 = friends, 2 = unlisted, 3 = private, … */
-    visibility: raw.visibility || 0,
+    id: String(source.id),
+    slug: source.slug || null,
+    title: source.title || null,
+    description: source.description || null,
+    content: typeof source.content === 'string' ? source.content : '',
+    contentType: source.content_type || 0,
+    kind: source.type || 0,
+    visibility: source.visibility || 0,
     // Anonymous reads never return drafts, but the fallback keeps a missing
     // `published_at` from producing an empty timestamp.
-    publishedAt: raw.published_at || raw.created_at || null,
-    editedAt: raw.edited_at || null,
-    isTruncated: Boolean(raw.is_truncated),
+    publishedAt: source.published_at || source.created_at || null,
+    editedAt: source.edited_at || null,
+    isTruncated: Boolean(source.is_truncated),
     counts: {
-      replies: raw.replies_count || 0,
-      boosts: raw.boost_count || 0,
+      replies: source.replies_count || 0,
+      boosts: source.boost_count || 0,
       // `reactions_count` arrives as `{ pray: 1 }`; the count of *kinds* is what
       // the string table renders.
       reactions: symbols.length,
-      upvotes: raw.upvotes || 0,
-      downvotes: raw.downvotes || 0,
-      views: raw.views_total || 0,
+      upvotes: source.upvotes || 0,
+      downvotes: source.downvotes || 0,
+      views: source.views_total || 0,
     },
     reactions,
-    tags: normalizeTags(raw.tags),
-    attachments: normalizeAttachments(raw.attachments),
-    author: normalizeAuthor(raw.publisher),
-    repliedTo: normalizeReference(raw.replied_post),
-    forwardedFrom: normalizeReference(raw.forwarded_post),
+    tags: normalizeTags(source.tags),
+    attachments: normalizeAttachments(source.attachments),
+    author: normalizeAuthor(source.publisher),
+    repliedTo: normalizeReference(source.replied_post),
+    forwardedFrom: normalizeReference(source.forwarded_post),
   };
 }
 
-/**
- * @param {unknown} raw
- * @returns {Array<object>} drops anything that is not a post
- */
-export function normalizePostList(raw) {
+/** Drops anything that is not a post. */
+export function normalizePostList(raw: unknown): Post[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map(normalizePost).filter(Boolean);
+  return raw.map(normalizePost).filter((item): item is Post => item !== null);
 }
 
 /**
  * Visibility enum → string-table key. `0` (public) has no label, and an enum
  * this build does not know about renders as nothing rather than as a raw number.
- * @param {number} visibility
- * @returns {string|null}
  */
-export function visibilityKey(visibility) {
+export function visibilityKey(visibility: number): string | null {
   switch (visibility) {
     case 1:
       return 'post_visibility_friends';
@@ -362,12 +415,12 @@ export function visibilityKey(visibility) {
  * FloatLand's buckets, rendered from the shipped string table rather than from
  * `Intl` or a month table: Gecko 48 has neither worth the bytes.
  *
- * @param {string|null} iso
- * @param {number} [now]
- * @returns {{ key: string, args?: object } | { text: string } | null} `null` when
- *   there is no usable date, so callers can leave the timestamp out.
+ * `null` when there is no usable date, so callers can leave the timestamp out.
  */
-export function formatRelativeTime(iso, now = Date.now()) {
+export function formatRelativeTime(
+  iso: string | null,
+  now: number = Date.now(),
+): Label | { text: string } | null {
   if (typeof iso !== 'string' || !iso) return null;
 
   const at = Date.parse(iso);

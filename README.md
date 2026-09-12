@@ -33,6 +33,12 @@ npm run verify     # static + runtime checks against Gecko 48
 npm run package:kaios   # build + verify + build/sokai-<version>.zip
 ```
 
+In the desktop browser the app's screen stack is reflected in the URL (`#/explore`,
+`#/post?id=…`) via `src/kaios/hash.ts`, so a refresh returns to the same screen and a
+screen is bookmarkable. That is a dev/testing affordance only: the sync is gated on
+`screen` being a monitor, and a KaiOS panel has no address bar — the hardware Back
+key is the app's own history, and the bundle never touches `location` on a handset.
+
 Deploy by pointing KaiOS WebIDE (or the simulator) at **`dist/`** — never at the project root.
 Only `dist/` is an installable package: `manifest.webapp` lives in `public/`, so the repository
 root has no manifest and WebIDE will refuse it instead of quietly packaging `node_modules` and
@@ -129,19 +135,25 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Units** — `1rem = 10px` at the guide's reference display (140ppi QVGA 240x320). The type
   ramp in `src/styles/kaios.css` is named after the guide's labels (H1, H3, H5, P.PRI, …).
 - **Chrome** — header (36px, uppercase) and softkey bar (30px, `SoftLeft`/`Enter`/`SoftRight`
-  with the centre key larger) follow the KaiOS team's own sample app, which is also the source
-  of the palette: the public guide documents no colour spec, so `--kai-color-accent` is the one
-  knob to re-theme. It is `#7577ba`, and the manifest's `theme_color` hands the same value to
-  the Launcher.
-- **Accent contrast** — white ink on `#7577ba` measures 4.1:1, and `#7577ba` used as *text* on
-  `--kai-color-surface` measures 3.8:1; WCAG AA asks 4.5:1 for body text, so those are the two
-  pairs to re-measure on a re-theme (accent-coloured text is the markdown link
-  and the raised field label). A sibling of the same hue, `#6769ae`, passes both — 5.0:1
-  and 4.6:1 — and dark ink on `#7577ba` passes at 4.6:1. Secondary text is the other known
-  shortfall: `--kai-color-text-muted` measures 2.4:1 on `--kai-color-surface` and 2.1:1 on the
-  page background the flat dashboard rows sit on.
-- **Dashboard** — the root screen, after the reference client's dashboard: the brand mark, a
-  clock and a countdown to the next event, all directly on the background (no card), then one flat
+  with the centre key larger) follow the KaiOS team's own sample app, which is the source of
+  the chrome metrics: the public guide documents no colour spec, so `--kai-color-accent` is the
+  one knob to re-theme. The palette is the calm "dawn light" re-theme (see
+  `src/styles/kaios.css`): a cool grey-violet base, soft near-black ink, and a slate-indigo
+  accent `#5e6a9e` pulled from the blue core of the brand mark. The manifest's `theme_color`
+  hands the same value to the Launcher.
+- **Accent contrast** — the accent is chosen to pass WCAG AA on both of its jobs at once:
+  white ink on `#5e6a9e` measures 5.2:1, and `#5e6a9e` used as *text* on
+  `--kai-color-surface` measures 4.8:1 (accent-coloured text is the markdown link
+  and the raised field label); AA asks 4.5:1 for body text. Keep the replacement accent
+  between those two pairs on a re-theme. Secondary text passes too: `--kai-color-text-muted`
+  measures 5.8:1 on the surface and 5.1:1 on the page background the flat dashboard rows sit on
+  (the sample app's own muted grey was 2.1–2.4:1 — unreadable, and the main reason for the
+  re-theme).
+- **Dashboard** — the root screen: the hero is the clock, after the reference client's
+  dashboard — the brand mark and the time share one baseline, directly on the background (no
+  card), with the date as a quiet caption underneath and a countdown to the next event below a
+  hairline. The one decorative object in the whole app is the accent dot straddling that
+  hairline — a sun on the horizon, the mark's motif in its quietest form. Then one flat
   row per top-level screen with a hairline separator and the accent for the current row — the
   KaiOS sample app's own list look. The clock needs nothing from the network, so the screen is
   alive before the first request resolves. It shows `HH:MM`, not seconds, and its timer is armed
@@ -161,7 +173,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   interval the server set, growing by five seconds on `slow_down`), and reports denial or
   expiry. Signed in it shows the display name and `@nick` and offers About and **Sign out**,
   which revokes the server session and drops the local one. The flow lives in
-  `src/kaios/session.js` and mirrors SolianWatch's standalone auth, sharing its public client
+  `src/kaios/session.ts` and mirrors SolianWatch's standalone auth, sharing its public client
   id (`solian-on-watch`).
 - **Icons** — the Solar Network brand artwork from the Solian client's asset set, whose licence is
   copied to `public/img/icons/LICENSE.md` next to it (that licence is not the Apache-2.0 the rest
@@ -190,13 +202,18 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 - **Pictures** are shown, not described. A picture attachment renders as an `<img>` on
   `https://api.solian.app/drive/files/{id}` — the same URL FloatLand and the Flutter client use —
   with the `width`/`height` from the wire as its box, so a row does not resize as bytes land
-  (Gecko 48 has no `loading="lazy"`, so the intrinsic size is the only placeholder available). The
+  (Gecko 48 has no `loading="lazy"`, so the intrinsic size is the only box available; when the
+  server sends a `blurhash` — about one image in ten — it is decoded locally to a 32×32 wash and
+  painted behind the loading image as a `data:` URL, inside the CSP, with the plain tinted box as
+  the fallback). The
   server answers `307` to a signed object-storage URL and serves a compressed WebP: 24kB–350kB
-  across five sampled posts. A row crops its one picture to 120px (`object-fit: cover`, Firefox
-  32+), square and snapped to the screen edges, and keeps the metadata as its caption; the detail
-  screen shows each picture whole and captionless — the picture is the post — while documents and
-  videos keep their line. An image
-  that fails to load falls back to the caption, `[image]` included.
+  across five sampled posts. A row shows its one picture at its own aspect
+  ratio — the box follows the wire's `width`/`height` — capped at a screen
+  width tall (`max-height`, with `object-fit: cover`, Firefox 32+), snapped to
+  the screen edges and captionless: the picture is the post. The detail
+  screen shows each picture whole and captionless too; documents and
+  videos keep their line, and an image
+  that fails to load falls back to the metadata caption, `[image]` included.
   - Inline `![alt](solian://files/{id})` images in a body are rendered too — markdown-it drops any
     `src` outside its scheme allowlist, so that one scheme is admitted in `src/content/markdown.js`
     and nothing else is: an image pointing anywhere else on the internet renders as nothing in
@@ -210,7 +227,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   notes.pdf · 1.5 KB`. Nothing is fetched for them, and `?thumbnail=true` 404s where the platform
   has no thumbnail.
 - **Safe area** — the KaiOS status bar is 26px and `manifest.webapp` does not request
-  `fullscreen`, so it is shown. The app reserves that space by default: `src/kaios/screen.js` sets
+  `fullscreen`, so it is shown. The app reserves that space by default: `src/kaios/screen.ts` sets
   `--kai-safe-top` and the header carries it as top padding, so its background runs under the bar
   and the title clears it. The one detectable case is the platform having reserved the space
   already — a handset whose panel matches the viewport's width and is a bar taller — where the
@@ -226,7 +243,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   the Search screen; both are reachable with `Up` from the first post or by wrapping past the
   last. Primary content registers as `initial`, so the highlight starts on the first post (or the
   search field on the Search screen) rather than on the controls. Selection is tracked in
-  `src/kaios/nav.js` by uid so Vue stays authoritative over the DOM;
+  `src/kaios/nav.ts` by uid so Vue stays authoritative over the DOM;
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
   compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the
@@ -234,7 +251,7 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   stays out of the way while a text field has focus; at the top level Back is not consumed and
   the platform leaves the app. Entering a text field opens the platform's own softkey bar.
 - **Localisation** — `public/data/*.properties` served through the platform's `l10n.js`, read
-  with `t()` from `src/kaios/l10n.js`. `t()` registers a reactive dependency, so strings that
+  with `t()` from `src/kaios/l10n.ts`. `t()` registers a reactive dependency, so strings that
   arrive after first paint still render.
 
 ## Privileged network access
@@ -242,12 +259,12 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
 `manifest.webapp` requests `systemXHR`, which is what lets a privileged app reach servers that
 send no CORS headers. That privilege only applies to `XMLHttpRequest` created with
 `mozSystem: true`; `fetch()` has no equivalent. Every remote call therefore goes through
-`request()` in `src/kaios/xhr.js`, which hands back the status, the response headers (the post
+`request()` in `src/kaios/xhr.ts`, which hands back the status, the response headers (the post
 list reports its row count in `x-total`) and the parsed body, and takes a method and a JSON body
 for the write paths that come later.
 
 `src/api/solian.js` is the only module that knows an API URL. Every call goes out with an
-`Authorization: Bearer` header when a session exists (refreshed lazily by `src/kaios/session.js`
+`Authorization: Bearer` header when a session exists (refreshed lazily by `src/kaios/session.ts`
 when the token nears expiry) and anonymously otherwise; the server limits anonymous responses to
 published, non-draft, public posts. Search is the post list with a `query` term — the server's
 semantic engine answers it, which is why a search can take a few seconds — and people search
@@ -273,11 +290,13 @@ app has — with reads and writes guarded so a host without storage simply runs 
 ```
 index.html                 Vite entry (source only — not a runnable page)
 src/
-  main.js                  entry: key handler, l10n, mount
+  main.ts                  entry: key handler, l10n, pinia, mount
   App.vue                  the view map + softkey bar
   api/                     Solar Network client, wire → model normalisers
-  content/markdown.js      post bodies: markdown in the detail, plain text in a row
-  kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR, status bar
+  content/markdown.ts      post bodies: markdown in the detail, plain text in a row
+  kaios/                   keys, nav/softkeys, screen stack, l10n bridge, systemXHR,
+                           status bar, dev-browser hash sync
+  stores/account.ts        the one Pinia store: session state, identity, sign-in UI
   components/              KaiOS UI components
   views/                   Dashboard, Explore, Post, About
   styles/kaios.css         design tokens + primitives
@@ -286,6 +305,11 @@ public/                    copied verbatim into dist/: manifest.webapp, l10n dat
 scripts/                   target, Babel config, Vite plugins, both gates, packager
 dist/                      the only installable app package (build output)
 ```
+
+Source is TypeScript throughout (checked by `vue-tsc` as the first step of `npm run
+verify`), and `~/` aliases the repository root — `~/src/kaios/nav.ts` — in both Vite
+and vue-tsc. The Babel chain gained `@babel/preset-typescript` so `.ts` modules still
+get core-js polyfill injection on the way to Gecko 48 (see `scripts/babel-legacy.js`).
 
 ## Trade-offs worth knowing
 
@@ -301,7 +325,7 @@ dist/                      the only installable app package (build output)
   for. If the core-js share ever matters more than conformance, prune it with the polyfill
   plugin's `shouldInjectPolyfill`.
 - **No vue-router.** KaiOS has no address bar and the Back key is the only history; the screen
-  stack in `src/kaios/views.js` is ~20 lines.
+  stack in `src/kaios/views.ts` is ~20 lines.
 - **`type: "privileged"`** is required for `systemXHR`, and privileged packages must be signed
   for the store. `cursor: true` in the manifest is the alternative to this app's own D-pad
-  handling and is not enabled — it conflicts with managing selection in `nav.js`.
+  handling and is not enabled — it conflicts with managing selection in `nav.ts`.

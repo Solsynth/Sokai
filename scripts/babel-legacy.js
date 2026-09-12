@@ -35,6 +35,11 @@ function installedCoreJsVersion() {
  *
  * Two halves, and both matter:
  *
+ *  - `@babel/preset-typescript` strips type annotations from `.ts` modules
+ *    (and `.vue` SFCs whose script is `lang="ts"` — though plugin-vue already
+ *    strips those via esbuild before this pass runs, so the preset only ever
+ *    sees real `.ts`). It runs before preset-env because Babel applies presets
+ *    right-to-left: types go first, then syntax lowering.
  *  - `@babel/preset-env` lower *syntax*. Gecko 48 lacks async/await (FF52),
  *    object spread (FF55), optional chaining (FF74), class fields, and so on.
  *  - `babel-plugin-polyfill-corejs3` adds *libraries*. Syntax lowering alone
@@ -49,7 +54,10 @@ function installedCoreJsVersion() {
 export function legacyBabelOptions({ polyfills = true } = {}) {
   return {
     // Rollup owns module semantics; Babel must never rewrite import/export.
-    presets: [['@babel/preset-env', { targets: KAIOS_BABEL_TARGETS, modules: false }]],
+    presets: [
+      ['@babel/preset-env', { targets: KAIOS_BABEL_TARGETS, modules: false }],
+      ['@babel/preset-typescript'],
+    ],
     plugins: polyfills
       ? [
           [

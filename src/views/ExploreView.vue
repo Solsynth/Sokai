@@ -32,42 +32,41 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-import { listPosts } from '../api/solian.js';
-import KaiHeader from '../components/KaiHeader.vue';
-import KaiList from '../components/KaiList.vue';
-import KaiListItem from '../components/KaiListItem.vue';
-import KaiPager from '../components/KaiPager.vue';
-import KaiPostRow from '../components/KaiPostRow.vue';
-import KaiSpinner from '../components/KaiSpinner.vue';
-import { t } from '../kaios/l10n.js';
-import { setBaseSoftkeys } from '../kaios/nav.js';
-import { pop, push } from '../kaios/views.js';
+import { listPosts } from '~/src/api/solian.js';
+import type { Post } from '~/src/api/models.js';
+import KaiHeader from '~/src/components/KaiHeader.vue';
+import KaiList from '~/src/components/KaiList.vue';
+import KaiListItem from '~/src/components/KaiListItem.vue';
+import KaiPager from '~/src/components/KaiPager.vue';
+import KaiPostRow from '~/src/components/KaiPostRow.vue';
+import KaiSpinner from '~/src/components/KaiSpinner.vue';
+import { t } from '~/src/kaios/l10n.js';
+import { setBaseSoftkeys } from '~/src/kaios/nav.js';
+import { pop, push } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Explore takes none.
-defineProps({
-  params: { type: Object, default: () => ({}) },
-});
+withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
 
 // The API caps `take` at 100; 20 rows is already several screens on a 240x320
 // handset.
 const TAKE = 20;
 
-const posts = ref([]);
+const posts = ref<Post[]>([]);
 const total = ref(0);
 /** 1-based. The API paginates by offset, so a page is `(page - 1) * TAKE`. */
 const page = ref(1);
 /** The page being fetched: a failure is retried at this one, not at `page`. */
 const requested = ref(1);
 /** 'loading' | 'ready' | 'error' */
-const status = ref('loading');
+const status = ref<'loading' | 'ready' | 'error'>('loading');
 
 const loading = computed(() => status.value === 'loading');
 const pages = computed(() => (total.value > 0 ? Math.ceil(total.value / TAKE) : 1));
 
-async function load(target) {
+async function load(target: number): Promise<void> {
   requested.value = target;
   status.value = 'loading';
 
@@ -83,7 +82,7 @@ async function load(target) {
   }
 }
 
-function retry() {
+function retry(): void {
   load(requested.value);
 }
 

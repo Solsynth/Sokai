@@ -1,4 +1,4 @@
-import { activate, move, press } from './nav.js';
+import { activate, move, press } from '~/src/kaios/nav.js';
 
 /**
  * Hardware key names reported by KaiOS as `KeyboardEvent.key`.
@@ -16,35 +16,35 @@ export const KEY = {
   SOFT_RIGHT: 'SoftRight',
   /** Back/Clear key. On combined-key devices this is also End/Power. */
   BACK: 'Backspace',
-};
+} as const;
 
 /**
  * Handles the Back key. Must return `true` when it consumed the key; returning
  * anything else lets the platform take it, which is how the app is left at the
  * top level (design-guide/key).
- * @type {null | (() => boolean)}
  */
-let backHandler = null;
+let backHandler: (() => boolean) | null = null;
 
-export function setBackHandler(handler) {
+export function setBackHandler(handler: (() => boolean) | null): void {
   backHandler = handler;
 }
 
-function isTextEntryFocused() {
+function isTextEntryFocused(): boolean {
   const element = document.activeElement;
   if (!element) return false;
   return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA';
 }
 
-function onKeydown(event) {
+function onKeydown(event: Event): void {
+  const key = (event as KeyboardEvent).key;
   const textEntry = isTextEntryFocused();
 
-  switch (event.key) {
+  switch (key) {
     case KEY.UP:
     case KEY.DOWN:
       // Inside a text field the D-pad moves the caret (design-guide/key).
       if (textEntry) return;
-      move(event.key === KEY.UP ? -1 : 1);
+      move(key === KEY.UP ? -1 : 1);
       break;
 
     case KEY.CENTER:
@@ -72,8 +72,8 @@ function onKeydown(event) {
   event.preventDefault();
 }
 
-/** @returns {() => void} uninstall */
-export function installKeyHandler(target = document) {
+/** @returns uninstall */
+export function installKeyHandler(target: EventTarget = document): () => void {
   target.addEventListener('keydown', onKeydown);
   return () => target.removeEventListener('keydown', onKeydown);
 }

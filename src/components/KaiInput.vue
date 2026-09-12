@@ -9,26 +9,32 @@
       :value="modelValue"
       :placeholder="placeholder"
       @click="nav.current = uid"
-      @input="emit('update:modelValue', $event.target.value)"
+      @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <span class="kai-field__label" :class="{ 'kai-field__label--raised': raised }">{{ label }}</span>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { nav, registerSelectable, unregisterSelectable } from '../kaios/nav.js';
+import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  label: { type: String, required: true },
-  placeholder: { type: String, default: '' },
-});
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string;
+    label: string;
+    placeholder?: string;
+  }>(),
+  { modelValue: '', placeholder: '' },
+);
 
-const emit = defineEmits(['update:modelValue', 'submit']);
+const emit = defineEmits<{
+  'update:modelValue': [value: string];
+  submit: [];
+}>();
 
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 const uid = ref(0);
 
 const isSelected = computed(() => uid.value !== 0 && nav.current === uid.value);
