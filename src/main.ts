@@ -1,3 +1,6 @@
+// First import: the runtime polyfill must exist before any module that calls
+// `Promise.withResolvers` runs (see kaios/polyfills.ts).
+import './kaios/polyfills';
 import './styles/kaios.css';
 
 import { createApp } from 'vue';

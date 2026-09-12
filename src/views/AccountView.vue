@@ -50,17 +50,22 @@
           <img
             class="kai-account__banner"
             :src="fileUrl(accountStore.account.profile.background.id)"
-            alt=""
+            alt="Account background image"
           />
         </div>
 
-        <div class="kai-account__identity">
-          <p class="kai-account__name">
-            {{ accountStore.account ? accountStore.account.display : t('account_signed_in') }}
-          </p>
-          <p v-if="accountStore.account && accountStore.account.name" class="kai-account__handle">
-            @{{ accountStore.account.name }}
-          </p>
+        <div
+          class="kai-account__identity"
+        >
+          <img v-if="pfp" class="kai-account__pfp" :src="pfp" alt="Profile picture" />
+          <div class="kai-account__who">
+            <p class="kai-account__name">
+              {{ accountStore.account ? accountStore.account.display : t('account_signed_in') }}
+            </p>
+            <p v-if="accountStore.account && accountStore.account.name" class="kai-account__handle">
+              @{{ accountStore.account.name }}
+            </p>
+          </div>
         </div>
 
         <KaiList class="kai-list--flat">
@@ -90,6 +95,15 @@ import { canGoBack, pop, push } from '~/src/kaios/views.js';
 withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
 
 const accountStore = useAccountStore();
+
+/**
+ * The square profile picture, when the profile carries one. `fileUrl` maps the
+ * drive file id to the same origin the banner uses.
+ */
+const pfp = computed(() => {
+  const picture = accountStore.account?.profile?.picture;
+  return picture ? fileUrl(picture.id) : '';
+});
 
 /**
  * The QR encodes the code-prefilled verification page when the server sent

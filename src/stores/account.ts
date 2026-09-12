@@ -13,13 +13,15 @@ import { defineStore } from 'pinia';
 
 export type AccountPhase = 'anonymous' | 'signing-in' | 'signed-in';
 
-export interface AccountBackground {
+/** A drive file reference — any profile image (banner or picture). */
+export interface ProfileFile {
   id: string;
 }
 
-/** The profile banner is optional; `background` is its only consumed field. */
+/** Profile images are optional; each keeps only its file `id`. */
 export interface AccountProfile {
-  background: AccountBackground | null;
+  background: ProfileFile | null;
+  picture: ProfileFile | null;
 }
 
 export interface Account {

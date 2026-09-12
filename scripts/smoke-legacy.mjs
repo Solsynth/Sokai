@@ -216,13 +216,16 @@ const CANNED = {
   me: {
     status: 200,
     headers: '',
+    /* Held briefly so the session-restore scenario can observe the cached
+       identity before the refreshed profile replaces it. */
+    delay: 300,
     body: {
       id: 'acc-1',
       // Wire convention: `name` is the unique handle (@name), `nick` the
       // pretty display name — the same split the feed rows use.
       name: 'testuser',
       nick: 'Test User',
-      profile: { background: { id: 'banner-1' } },
+      profile: { background: { id: 'banner-1' }, picture: { id: 'avatar-1' } },
     },
   },
   revoke: { status: 200, headers: '', body: {} },
@@ -249,6 +252,7 @@ const PREAMBLE = `<script>
   delete Promise.prototype.finally;
   delete Promise.allSettled;
   delete Promise.any;
+  delete Promise.withResolvers;
 
   delete window.NodeList.prototype.forEach;
   delete window.NodeList.prototype[Symbol.iterator];
@@ -335,7 +339,14 @@ const PREAMBLE = `<script>
       return;
     }
     if (url.indexOf('/stargate/accounts/me') !== -1) {
-      xhr.respond(CANNED.me.status, CANNED.me.body, CANNED.me.headers);
+      var meDelay = CANNED.me.delay || 0;
+      if (meDelay > 0) {
+        setTimeout(function () {
+          xhr.respond(CANNED.me.status, CANNED.me.body, CANNED.me.headers);
+        }, meDelay);
+      } else {
+        xhr.respond(CANNED.me.status, CANNED.me.body, CANNED.me.headers);
+      }
       return;
     }
     if (url.indexOf('/stargate/sessions/current') !== -1) {
@@ -1223,11 +1234,16 @@ check(
     const name = text('.kai-account__name');
     const handle = text('.kai-account__handle');
     const banner = document.querySelector('.kai-account__banner');
+    const pfp = document.querySelector('.kai-account__pfp');
+    const identity = document.querySelector('.kai-account__identity');
     return (
       name === 'Test User' &&
       handle === '@testuser' &&
       Boolean(banner) &&
-      banner.getAttribute('src') === 'https://api.solian.app/drive/files/banner-1'
+      banner.getAttribute('src') === 'https://api.solian.app/drive/files/banner-1' &&
+      Boolean(pfp) &&
+      pfp.getAttribute('src') === 'https://api.solian.app/drive/files/avatar-1' &&
+      identity.classList.contains('kai-account__identity--with-pfp')
     );
   })(),
   {
@@ -1235,6 +1251,12 @@ check(
     handle: text('.kai-account__handle'),
     banner: (document.querySelector('.kai-account__banner') || {}).getAttribute
       ? document.querySelector('.kai-account__banner').getAttribute('src')
+      : null,
+    pfp: (document.querySelector('.kai-account__pfp') || {}).getAttribute
+      ? document.querySelector('.kai-account__pfp').getAttribute('src')
+      : null,
+    withPfp: (document.querySelector('.kai-account__identity') || {}).classList
+      ? document.querySelector('.kai-account__identity').classList.contains('kai-account__identity--with-pfp')
       : null,
   },
 );
@@ -1286,6 +1308,113 @@ await until(() => text('.kai-header__title') === 'app_title');
 
 const backEvent = await press('Backspace');
 check('Back at the top level is left to the platform', backEvent.defaultPrevented === false);
+
+// ---- Relaunch with a stored session -----------------------------------------
+// A fresh page with a stored session must render the cached identity at once
+// (optimistic) and re-fetch the profile in the background — so a display name
+// or banner changed on another device shows up on the next launch. jsdom's
+// localStorage throws on file: origins, so the relaunch document gets an http
+// origin; the rebased script URLs are absolute file:// paths, so they still
+// load from dist/.
+const SEED = {
+  accessToken: 'test-access',
+  refreshToken: 'test-refresh',
+  expiresAt: Date.now() + 600000,
+  account: {
+    id: 'acc-1',
+    name: 'testuser',
+    nick: 'Cached Nick',
+    display: 'Cached Nick',
+    profile: { background: { id: 'banner-1' }, picture: { id: 'avatar-1' } },
+  },
+};
+const relaunchHtml = html
+  .replace(/(src|href)="\.\//g, `$1="${distUrl}`)
+  .replace(
+    '<head>',
+    `<head><script>window.localStorage.setItem('sokai.session', ${JSON.stringify(JSON.stringify(SEED))});</script>`,
+  );
+const relaunch = new JSDOM(relaunchHtml, {
+  runScripts: 'dangerously',
+  resources: 'usable',
+  pretendToBeVisual: true,
+  url: 'http://sokai.test/index.html',
+});
+const rw = relaunch.window;
+if (rw.document.readyState !== 'complete') {
+  await new Promise((resolve) => rw.addEventListener('load', resolve, { once: true }));
+}
+await new Promise((resolve) => setTimeout(resolve, 50));
+
+const rRequests = rw.__requests;
+const rdoc = rw.document;
+const rtext = (selector) => {
+  const node = rdoc.querySelector(selector);
+  return node ? node.textContent.trim() : '';
+};
+const rflush = () => new Promise((resolve) => setTimeout(resolve, 0));
+async function runtil(predicate) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (predicate()) return true;
+    await rflush();
+  }
+  return false;
+}
+async function rpress(key) {
+  const event = new rw.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  rdoc.dispatchEvent(event);
+  await rflush();
+  return event;
+}
+/** For work paced by the canned /me delay (a real timer `rflush` cannot reach). */
+async function runtilTimer(predicate, budgetMs = 8000) {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+// The stored identity renders without waiting for the network…
+await runtil(() => rtext('.kai-header__title') === 'app_title');
+await rpress('ArrowDown');
+await rpress('Enter');
+await runtil(() => rtext('.kai-header__title') === 'nav_account');
+check(
+  'a restored session shows the cached identity immediately',
+  (() => {
+    const pfp = rdoc.querySelector('.kai-account__pfp');
+    return (
+      rtext('.kai-account__name') === 'Cached Nick' &&
+      rtext('.kai-account__handle') === '@testuser' &&
+      Boolean(pfp) &&
+      pfp.getAttribute('src') === 'https://api.solian.app/drive/files/avatar-1'
+    );
+  })(),
+  { name: rtext('.kai-account__name'), handle: rtext('.kai-account__handle') },
+);
+
+// …and refreshes it in the background with a fresh /me — no token refresh,
+// because the stored access token still has life in it.
+const rMe = rRequests.filter((request) => request.url.indexOf('/stargate/accounts/me') !== -1)[0];
+check(
+  'restoring a session re-fetches the profile',
+  Boolean(rMe) && rMe.requestHeaders.Authorization === 'Bearer test-access',
+  rMe ? rMe.requestHeaders : null,
+);
+check(
+  'a still-valid stored token is not refreshed on restore',
+  rRequests.filter((request) => request.url.indexOf('/stargate/auth/open/token') !== -1).length === 0,
+  rRequests.map((request) => request.url),
+);
+await runtilTimer(() => rtext('.kai-account__name') === 'Test User');
+check(
+  'the refreshed profile replaces the cached identity',
+  rtext('.kai-account__name') === 'Test User' && rtext('.kai-account__handle') === '@testuser',
+  { name: rtext('.kai-account__name'), handle: rtext('.kai-account__handle') },
+);
+relaunch.window.close();
 
 dom.window.close();
 

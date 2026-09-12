@@ -117,9 +117,13 @@ export function initSession(): void {
   refreshToken = typeof raw.refreshToken === 'string' ? raw.refreshToken : null;
   expiresAt = typeof raw.expiresAt === 'number' ? raw.expiresAt : 0;
   // Optimistic: the cached identity renders immediately; a dead token is
-  // discovered lazily by the first `bearerToken()` refresh.
+  // discovered lazily by the first `bearerToken()` refresh. The cached
+  // identity is also refreshed best-effort in the background — `refreshProfile`
+  // refreshes an expired token and re-fetches `/me`, so a display name or
+  // banner changed on another device shows up on the next launch.
   account.phase = 'signed-in';
   account.account = raw.account && typeof raw.account === 'object' ? (raw.account as Account) : null;
+  refreshProfile(pollGeneration);
 }
 
 function saveSession(): void {
@@ -335,7 +339,7 @@ async function poll(code: DeviceCode, generation: number): Promise<void> {
     const account = useAccountStore();
     account.waiting = false;
     // The identity is a nice-to-have; a failed profile fetch keeps the session.
-    await loadProfile(generation);
+    await refreshProfile(generation);
     if (generation !== pollGeneration) return;
     account.phase = 'signed-in';
     return;
@@ -392,10 +396,21 @@ function parseTokenResponse(data: unknown): TokenPair {
   };
 }
 
-async function loadProfile(generation: number): Promise<void> {
+/**
+ * Fetches the signed-in identity into the store, best-effort. Called after a
+ * successful device-flow exchange and, fire-and-forget, on session restore
+ * (where it also refreshes an expired token first — `bearerToken` — so the
+ * launch self-heals before the first read request).
+ *
+ * `generation` guards against the identity applying after a sign-out or a new
+ * sign-in replaced the session; a failed fetch keeps the cached identity.
+ */
+async function refreshProfile(generation: number): Promise<void> {
   try {
+    const token = await bearerToken();
+    if (!token || generation !== pollGeneration) return;
     const response = await request(API_BASE_URL + '/stargate/accounts/me', {
-      headers: { Accept: 'application/json', Authorization: 'Bearer ' + accessToken },
+      headers: { Accept: 'application/json', Authorization: 'Bearer ' + token },
     });
     const account = normalizeAccount(response.data);
     if (generation !== pollGeneration || !account) return;

@@ -910,21 +910,46 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   max-height: 12rem;
   object-fit: cover;
   background: var(--kai-color-border);
+  /* `aspect-ratio` (Firefox 89+) is the only pre-load placeholder for the
+     16:7 shape; Gecko 48 must do without it — the banner renders aspect-true
+     from the image's own ratio once it loads. */
 }
 
-/* The identity block leads the signed-in screen: display name over @nick. */
+/* The identity block leads the signed-in screen: display name over @nick.
+   A square profile picture can lead it; the row then snaps to the banner
+   (no top offset) so the tile and the name sit flush. */
 .kai-account__identity {
-  margin: 0.4rem 0 0.8rem;
+  display: flex;
+  align-items: center;
+  margin: 0.8rem 0 0.8rem;
+}
+
+.kai-account__pfp {
+  flex-shrink: 0;
+  width: 4rem;
+  height: 4rem;
+  margin-right: 0.8rem;
+  border: 0.1rem solid var(--kai-color-border);
+  background: var(--kai-color-border);
+  object-fit: cover;
+  border-radius: 1rem;
+}
+
+.kai-account__who {
+  min-width: 0;
+  flex: 1;
 }
 
 .kai-account__name {
   margin: 0;
   font-size: var(--kai-fs-p-pri);
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .kai-account__handle {
   margin: 0.2rem 0 0;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-sec);
+  line-height: 1;
 }
