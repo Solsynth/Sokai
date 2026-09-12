@@ -8,8 +8,9 @@
     @click="emit('select')"
   >
     <span class="kai-post__author">
-      {{ post.author.display }}
-      <span v-if="post.author.name" class="kai-post__handle">@{{ post.author.name }}</span>
+      <KaiAvatar :file="post.author.picture" size="xs" />
+      <span>{{ post.author.display }}</span>
+      <span v-if="post.author.name" class="kai-post__handle">&nbsp;@{{ post.author.name }}</span>
     </span>
 
     <span class="kai-post__meta">
@@ -32,6 +33,8 @@
       <span v-for="count in counts" :key="count.key">{{ t(count.key, { n: count.n }) }}</span>
     </span>
 
+    <KaiReactionChips :reactions="post.reactions" />
+
     <span v-if="post.tags.length" class="kai-post__tags">
       <span v-for="tag in post.tags" :key="tag" class="kai-tag">{{ tag }}</span>
     </span>
@@ -39,20 +42,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import KaiAttachmentList from './KaiAttachmentList.vue';
+import KaiAvatar from './KaiAvatar.vue';
 import KaiPostQuote from './KaiPostQuote.vue';
+import KaiReactionChips from './KaiReactionChips.vue';
 import { excerpt } from '~/src/content/markdown.js';
+import { reactionChips } from '~/src/content/reactions.js';
 import { formatRelativeTime, postKindKey, visibilityKey, type Post } from '~/src/api/models.js';
 import { t } from '~/src/kaios/l10n.js';
 import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
-const props = defineProps<{
-  post: Post;
-}>();
+const props = withDefaults(
+  defineProps<{
+    post: Post;
+    /** Eligible for the highlight when the screen mounts: the feed marks the
+     *  row it restores so a Back returns to the same place in the timeline. */
+    initial?: boolean;
+  }>(),
+  { initial: true },
+);
 
-const emit = defineEmits<{ select: [] }>();
+const emit = defineEmits<{
+  select: [];
+  /** The row became the highlighted entry; the feed uses it to arm the
+   *  softkey actions that act on the highlighted post (reacting). */
+  selected: [id: string];
+}>();
 
 /** One sample line and a count for the rest: a row is not the place for a gallery. */
 const ATTACHMENT_LINES = 1;
@@ -82,13 +99,23 @@ const quoteLabelKey = computed(() =>
   props.post.forwardedFrom ? 'post_forwarded_from' : 'post_replied_to',
 );
 
+const chips = computed(() => reactionChips(props.post.reactions));
+
 const counts = computed(() => {
   const list: Array<{ key: string; n: number }> = [];
   const { replies, boosts, reactions } = props.post.counts;
   if (replies) list.push({ key: 'post_count_replies', n: replies });
   if (boosts) list.push({ key: 'post_count_boosts', n: boosts });
-  if (reactions) list.push({ key: 'post_count_reactions', n: reactions });
+  // The sticker pills render the known reactions individually; the kinds count
+  // is only for reactions without a bundled sticker (custom ones).
+  if (reactions && !chips.value.length) list.push({ key: 'post_count_reactions', n: reactions });
   return list;
+});
+
+// The feed arms its softkey actions on the highlighted post, so a row reports
+// when the highlight lands on it.
+watch(isSelected, (selected) => {
+  if (selected) emit('selected', props.post.id);
 });
 
 onMounted(() => {
@@ -97,7 +124,7 @@ onMounted(() => {
     onEnter: () => emit('select'),
     // Posts are the screen's primary content: the highlight starts here even
     // when the page-flip controls sit above the list.
-    initial: true,
+    initial: props.initial,
   });
 });
 

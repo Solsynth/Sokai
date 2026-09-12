@@ -5,22 +5,43 @@
     nav-selectable="true"
     :nav-selected="isSelected ? 'true' : 'false'"
     class="kai-list-item"
+    :class="{ 'kai-list-item--thumb': Boolean(thumb) }"
     @click="emit('select')"
   >
-    <span class="kai-list-item__primary">{{ primary }}</span>
-    <span v-if="secondary" class="kai-list-item__secondary">{{ secondary }}</span>
+    <!-- With an icon the row is glyph-only (the pager's direction cells): the
+         name lives in `aria-label`, since the icon carries no text. -->
+    <component v-if="icon" :is="icon" class="kai-list-item__icon" aria-hidden="true" />
+    <template v-else-if="thumb">
+      <KaiAvatar class="kai-list-item__thumb" :file="thumb" size="xs" />
+      <span class="kai-list-item__text">
+        <span class="kai-list-item__primary">{{ primary }}</span>
+        <span v-if="secondary" class="kai-list-item__secondary">{{ secondary }}</span>
+      </span>
+    </template>
+    <template v-else>
+      <span class="kai-list-item__primary">{{ primary }}</span>
+      <span v-if="secondary" class="kai-list-item__secondary">{{ secondary }}</span>
+    </template>
   </li>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue';
 
+import KaiAvatar from './KaiAvatar.vue';
 import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
-const props = defineProps<{
-  primary: string;
-  secondary?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    primary?: string;
+    secondary?: string;
+    /** Drive file id of an avatar to lead the row with. */
+    thumb?: string;
+    /** A lucide icon for a glyph-only row (the pager's direction cells). */
+    icon?: Component;
+  }>(),
+  { primary: '', secondary: '', thumb: '', icon: undefined },
+);
 
 const emit = defineEmits<{ select: [] }>();
 

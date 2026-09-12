@@ -2,7 +2,7 @@
   <div class="kai-field">
     <input
       ref="root"
-      class="kai-field__input"
+      class="kai-field__input kai-field__input--line"
       type="text"
       nav-selectable="true"
       :nav-selected="isSelected ? 'true' : 'false'"

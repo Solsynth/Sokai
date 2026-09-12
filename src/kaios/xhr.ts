@@ -112,8 +112,11 @@ export function request(
       outgoing[name] = headers[name];
     }
     // JSON is the default body type this app sends; callers should not have to
-    // remember the header. String bodies are pre-encoded and carry their own.
-    if (body !== null && body !== undefined && typeof body !== 'string' && !hasContentType) {
+    // remember the header. FormData is sent as-is (the browser adds the
+    // multipart boundary), and string bodies are pre-encoded and carry their
+    // own Content-Type.
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body !== null && body !== undefined && typeof body !== 'string' && !isFormData && !hasContentType) {
       outgoing['Content-Type'] = 'application/json';
     }
 
@@ -133,7 +136,13 @@ export function request(
     xhr.ontimeout = () => reject(new Error('Timeout'));
 
     xhr.send(
-      body === null || body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+      body === null || body === undefined
+        ? undefined
+        : typeof body === 'string'
+          ? body
+          : typeof FormData !== 'undefined' && body instanceof FormData
+            ? body
+            : JSON.stringify(body),
     );
 
   return promise;

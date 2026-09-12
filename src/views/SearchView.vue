@@ -51,7 +51,7 @@ import KaiPostRow from '~/src/components/KaiPostRow.vue';
 import KaiSpinner from '~/src/components/KaiSpinner.vue';
 import { t } from '~/src/kaios/l10n.js';
 import { setBaseSoftkeys } from '~/src/kaios/nav.js';
-import { pop, push } from '~/src/kaios/views.js';
+import { push } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Search takes none.
 withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
@@ -106,7 +106,7 @@ function onSubmit(): void {
 
 onMounted(() => {
   setBaseSoftkeys(() => ({
-    left: { label: t('action_back'), onPress: pop },
+    // The hardware Back key leaves the search (the design guide's rule).
     center: { label: t('action_open') },
     // The right key is held for the write actions that follow the read path.
     right: { label: '' },

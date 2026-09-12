@@ -14,16 +14,24 @@ import { setBackHandler } from '~/src/kaios/keys.js';
 import { canGoBack, currentView, pop, stack } from '~/src/kaios/views.js';
 import AboutView from '~/src/views/AboutView.vue';
 import AccountView from '~/src/views/AccountView.vue';
+import ComposeView from '~/src/views/ComposeView.vue';
 import DashboardView from '~/src/views/DashboardView.vue';
 import ExploreView from '~/src/views/ExploreView.vue';
+import LightboxView from '~/src/views/LightboxView.vue';
 import PostView from '~/src/views/PostView.vue';
+import PublisherView from '~/src/views/PublisherView.vue';
+import ReactionsView from '~/src/views/ReactionsView.vue';
 import SearchView from '~/src/views/SearchView.vue';
 
 const VIEWS: Record<string, Component> = {
   dashboard: DashboardView,
   explore: ExploreView,
+  compose: ComposeView,
+  publishers: PublisherView,
   search: SearchView,
   post: PostView,
+  reactions: ReactionsView,
+  lightbox: LightboxView,
   account: AccountView,
   about: AboutView,
 };

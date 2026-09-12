@@ -4,12 +4,21 @@
 
     <main class="kai-content kai-content--roomy">
       <!--
-        Attachments sit above the post body, flush against it: the picture is the
-        post, the text is what it says. They are also outside the selectable body,
-        so the D-pad scrolls the text, not the picture.
+        The first attachment is the post: the strip sits above the body, flush
+        against it, and is selectable — Enter opens the lightbox, which holds
+        the whole set (LEFT/RIGHT to switch, zoom for images, playback for
+        videos). The rest are counted under it.
       -->
-      <div v-if="post && post.attachments.length" class="kai-post-extras">
-        <KaiAttachmentList :attachments="post.attachments" :show-captions="false" />
+      <div
+        v-if="post && post.attachments.length"
+        ref="extras"
+        tabindex="-1"
+        nav-selectable="true"
+        :nav-selected="isExtrasSelected ? 'true' : 'false'"
+        class="kai-post-extras"
+        @click="openLightbox"
+      >
+        <KaiAttachmentList :attachments="post.attachments" :limit="1" :show-captions="false" />
       </div>
 
       <!--
@@ -41,7 +50,10 @@
 
           <div class="kai-md" v-html="rendered"></div>
 
-          <span class="kai-post__author">{{ post.author.display }}</span>
+          <span class="kai-post__author">
+            <KaiAvatar :file="post.author.picture" size="md" />
+            <span>{{ post.author.display }}</span>
+          </span>
 
           <span class="kai-post__meta">
             <span v-if="handle" class="kai-post__handle">@{{ handle }}</span>
@@ -56,15 +68,19 @@
             <span v-if="post.counts.boosts" class="kai-post__count">
               {{ t('post_count_boosts', { n: post.counts.boosts }) }}
             </span>
-            <span v-if="post.counts.reactions" class="kai-post__count">
+            <span v-if="post.counts.reactions && !chips.length" class="kai-post__count">
               {{ t('post_count_reactions', { n: post.counts.reactions }) }}
             </span>
             <span v-for="tag in post.tags" :key="tag" class="kai-tag">{{ tag }}</span>
           </span>
+
+          <KaiReactionChips :reactions="post.reactions" />
         </template>
       </div>
 
       <template v-if="post">
+        <p v-if="deleteErrorKey" class="kai-text kai-text--error">{{ t(deleteErrorKey) }}</p>
+
         <p class="kai-separator">{{ t('post_replies') }}</p>
 
         <KaiSpinner v-if="repliesLoading" />
@@ -93,26 +109,40 @@
         </template>
       </template>
     </main>
+
+    <KaiOptionMenu
+      v-if="menuOpen"
+      :title="t('post_options')"
+      :options="menuOptions"
+      @select="onMenuSelect"
+      @cancel="menuOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { bodyHtml } from '~/src/content/markdown.js';
+import { reactionChips } from '~/src/content/reactions.js';
 import { formatRelativeTime, postKindKey, visibilityKey, type Post } from '~/src/api/models.js';
-import { getPost, listReplies } from '~/src/api/solian.js';
+import { getPost, listReplies, deletePost } from '~/src/api/solian.js';
 import KaiAttachmentList from '~/src/components/KaiAttachmentList.vue';
+import KaiAvatar from '~/src/components/KaiAvatar.vue';
 import KaiHeader from '~/src/components/KaiHeader.vue';
 import KaiList from '~/src/components/KaiList.vue';
 import KaiListItem from '~/src/components/KaiListItem.vue';
+import KaiOptionMenu, { type Option } from '~/src/components/KaiOptionMenu.vue';
 import KaiPager from '~/src/components/KaiPager.vue';
 import KaiPostQuote from '~/src/components/KaiPostQuote.vue';
 import KaiPostRow from '~/src/components/KaiPostRow.vue';
+import KaiReactionChips from '~/src/components/KaiReactionChips.vue';
 import KaiSpinner from '~/src/components/KaiSpinner.vue';
 import { t } from '~/src/kaios/l10n.js';
-import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
+import { move, nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
 import { pop, push } from '~/src/kaios/views.js';
+import { useAccountStore } from '~/src/stores/account.js';
+import { useFeedStore } from '~/src/stores/feed.js';
 
 const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
   params: () => ({}),
@@ -121,7 +151,9 @@ const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
 const TAKE = 20;
 
 const body = ref<HTMLElement | null>(null);
+const extras = ref<HTMLElement | null>(null);
 const uid = ref(0);
+const extrasUid = ref(0);
 
 const post = ref<Post | null>(null);
 /** 'loading' | 'ready' | 'not-found' | 'error' */
@@ -142,6 +174,28 @@ const repliesPages = computed(() =>
 );
 
 const isBodySelected = computed(() => uid.value !== 0 && nav.current === uid.value);
+const isExtrasSelected = computed(() => extrasUid.value !== 0 && nav.current === extrasUid.value);
+
+/**
+ * The lightbox takes the post's attachments — already in memory, no second
+ * fetch — as JSON in the view params, opening on the first one.
+ */
+function openLightbox(): void {
+  const list = post.value?.attachments;
+  if (!list || !list.length) return;
+  push('lightbox', { index: '0', attachments: JSON.stringify(list) });
+}
+
+/**
+ * The picture is the content of a picture post, so the highlight lands on it
+ * the moment the post arrives — the strip mounts after the fetch, one step
+ * above the body in document order, so a single UP hands it the highlight.
+ */
+function registerExtras(): void {
+  if (!post.value || !post.value.attachments.length || !extras.value || extrasUid.value) return;
+  extrasUid.value = registerSelectable({ el: extras, onEnter: openLightbox, initial: true });
+  move(-1);
+}
 
 const rendered = computed(() => (post.value ? bodyHtml(post.value) : ''));
 
@@ -185,6 +239,153 @@ const time = computed(() => {
 const visibility = computed(() => (post.value ? visibilityKey(post.value.visibility) : null));
 
 const kind = computed(() => (post.value ? postKindKey(post.value.kind) : null));
+
+/** The post's reactions with a bundled sticker; the meta count only covers the rest. */
+const chips = computed(() => (post.value ? reactionChips(post.value.reactions) : []));
+
+/** Total individual reactions, for the React row's summary line. */
+const reactionTotal = computed(() => {
+  if (!post.value) return 0;
+  const symbols = Object.keys(post.value.reactions);
+  let total = 0;
+  for (let index = 0; index < symbols.length; index += 1) {
+    total += post.value.reactions[symbols[index]];
+  }
+  return total;
+});
+
+const accountStore = useAccountStore();
+
+/**
+ * The post is the signed-in account's own when the author's publisher name is
+ * the account's handle — the personal publisher. Managed publishers are not
+ * matched here, so their posts never get edit/delete offered.
+ */
+const isOwned = computed(() => {
+  const account = accountStore.account;
+  return Boolean(post.value && account && post.value.author.name === account.name);
+});
+
+/** Two-step delete: the first press asks, the second acts. */
+const confirmDelete = ref(false);
+const deleteErrorKey = ref('');
+
+/** The option menu over the post; it owns the D-pad while open. */
+const menuOpen = ref(false);
+
+function openMenu(): void {
+  confirmDelete.value = false;
+  menuOpen.value = true;
+}
+
+/** The actions an option menu can run, in the design guide's read-then-write order. */
+const menuOptions = computed<Option[]>(() => {
+  const options: Option[] = [
+    { id: 'reply', label: t('action_reply') },
+    { id: 'forward', label: t('action_forward') },
+    { id: 'react', label: t('action_react') },
+  ];
+  if (isOwned.value) {
+    options.push({ id: 'edit', label: t('post_edit') });
+    options.push({ id: 'delete', label: confirmDelete.value ? t('post_delete_confirm') : t('post_delete') });
+  }
+  options.push({ id: 'reload', label: t('action_reload') });
+  return options;
+});
+
+function onMenuSelect(id: string): void {
+  if (id === 'reply') {
+    menuOpen.value = false;
+    openReply();
+  } else if (id === 'forward') {
+    menuOpen.value = false;
+    openForward();
+  } else if (id === 'react') {
+    menuOpen.value = false;
+    openReactions();
+  } else if (id === 'edit') {
+    menuOpen.value = false;
+    openEdit();
+  } else if (id === 'delete') {
+    void onDelete();
+  } else if (id === 'reload') {
+    menuOpen.value = false;
+    reload();
+  }
+}
+
+/**
+ * The picker takes the post's reactions and the user's own in its params —
+ * already in memory, no second fetch — and the post reloads with the fresh
+ * counts on return.
+ */
+function openReactions(): void {
+  const found = post.value;
+  if (!found) return;
+  push('reactions', {
+    id: found.id,
+    reactions: JSON.stringify(found.reactions),
+    made: JSON.stringify(found.reactionsMade),
+  });
+}
+
+/** The reply composer anchors on the post; the feed reloads on return. */
+function openReply(): void {
+  const found = post.value;
+  if (!found) return;
+  push('compose', { mode: 'reply', id: found.id, author: found.author.display });
+}
+
+/** A forward quotes the post: the composer renders it, the wire gets its id. */
+function openForward(): void {
+  const found = post.value;
+  if (!found) return;
+  push('compose', { mode: 'forward', id: found.id, forwarded: JSON.stringify(found) });
+}
+
+/**
+ * The edit composer is seeded with the post's content, its already-uploaded
+ * attachment ids and its publisher; the post reloads with the result on return.
+ */
+function openEdit(): void {
+  const found = post.value;
+  if (!found) return;
+  push('compose', {
+    mode: 'edit',
+    id: found.id,
+    content: found.content,
+    attachments: JSON.stringify(
+      found.attachments.map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        size: attachment.size,
+        kind: attachment.kind,
+      })),
+    ),
+    publisher: found.author.name,
+  });
+}
+
+/** Deletes the post on the second press; a failure keeps the post on screen. */
+async function onDelete(): Promise<void> {
+  const found = post.value;
+  if (!found || !isOwned.value) return;
+  if (!confirmDelete.value) {
+    confirmDelete.value = true;
+    return;
+  }
+  confirmDelete.value = false;
+  deleteErrorKey.value = '';
+  try {
+    await deletePost(found.id);
+    useFeedStore().markStale();
+    menuOpen.value = false;
+    pop();
+  } catch (error) {
+    deleteErrorKey.value = 'post_delete_error';
+    menuOpen.value = false;
+  }
+}
 
 const quote = computed(() =>
   post.value ? post.value.forwardedFrom || post.value.repliedTo : null,
@@ -237,6 +438,12 @@ function reload(): void {
 // `params`, so the reload has to be driven by the id rather than by mount.
 watch(() => props.params.id, reload, { immediate: true });
 
+// The attachment strip arrives with the post, so its selectable registers when
+// the post does, not at mount.
+watch([post, postStatus], () => {
+  if (post.value) void nextTick(registerExtras);
+});
+
 onMounted(() => {
   uid.value = registerSelectable({
     el: body,
@@ -248,13 +455,20 @@ onMounted(() => {
   });
 
   setBaseSoftkeys(() => ({
-    left: { label: t('action_back'), onPress: pop },
-    center: { label: t('action_open') },
-    right: { label: t('action_reload'), onPress: reload },
+    // The hardware Back key goes up (the design guide's Back/Clear rule).
+    // The option menu carries its own title bar and softkey bar, so the
+    // screen's bar reads empty while it is up — the sheet's own SELECT/CANCEL
+    // are the live keys, and the menu intercepts every press itself.
+    left: menuOpen.value ? { label: '' } : undefined,
+    center: { label: menuOpen.value ? '' : t('action_open') },
+    right: menuOpen.value
+      ? { label: '' }
+      : { label: t('action_options'), onPress: openMenu },
   }));
 });
 
 onBeforeUnmount(() => {
   unregisterSelectable(uid.value);
+  unregisterSelectable(extrasUid.value);
 });
 </script>

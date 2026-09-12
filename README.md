@@ -121,8 +121,13 @@ whose body must render as markdown rather than as escaped text (with its quoted 
 as markdown too, its attachments above the card, the card body carrying a shadow with no
 horizontal margin, and only Solar Network file images fetched), the
 replies that arrive with it, the status-bar inset rule, the searchbar pushing the Search screen
-whose field starts highlighted and whose committed query hits the posts search endpoint, and
-`Back` at the top level falling through to the platform. 80 assertions. This is the check that
+whose field starts highlighted and whose committed query hits the posts search endpoint, the
+text-field key rule (a one-line field never keeps an arrow; a multi-line body keeps it only while
+the caret has a line to move to, and at the edge the highlight takes the press and the field gives
+up focus — the compose body is no trap), `Enter` as the multi-line body's newline against the
+one-line field's app action, the compose body carrying no underline where the searchbar field
+draws one, and
+`Back` at the top level falling through to the platform. 119 assertions. This is the check that
 proves the polyfills are actually present rather than merely configured.
 
 The realm still provides jsdom's DOM, which is newer than Gecko 48's: these gates cover
@@ -247,9 +252,13 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   `[nav-selectable]` / `[nav-selected="true"]` attributes are kept for CSS and tooling
   compatibility.
 - **Keys** — `SoftLeft` / `SoftRight` / `Enter`, D-pad arrows, `Backspace` as Back. Per the
-  guide, Back inside a text field clears a character and D-pad moves the caret, so the handler
-  stays out of the way while a text field has focus; at the top level Back is not consumed and
-  the platform leaves the app. Entering a text field opens the platform's own softkey bar.
+  guide, Back inside a text field clears a character and the D-pad moves the caret, so the
+  handler stays out of the way — but only for a press the caret can use: at the edge of the text
+  the highlight takes the D-pad press and the field gives up focus, so a field is never a dead
+  end. `Enter` inserts a newline in the multi-line compose body (the draft is markdown) and stays
+  the app's action in a one-line field, where it commits the search. At the top level Back is not
+  consumed and the platform leaves the app. Entering a text field opens the platform's own
+  softkey bar.
 - **Localisation** — `public/data/*.properties` served through the platform's `l10n.js`, read
   with `t()` from `src/kaios/l10n.ts`. `t()` registers a reactive dependency, so strings that
   arrive after first paint still render.

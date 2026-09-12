@@ -308,7 +308,7 @@ body {
 .kai-list-item {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: start;
   min-height: var(--kai-row-height);
   margin-bottom: 0.9rem;
   padding: 0.6rem var(--kai-gutter);
@@ -335,6 +335,50 @@ body {
   color: var(--kai-color-on-accent);
 }
 
+/* A row led by an avatar: thumbnail on the left, the text stacked beside it.
+   (No flex `gap`: that is Firefox 63+, and KaiOS 2.5 is Gecko 48.) */
+.kai-list-item--thumb {
+  flex-direction: row;
+  align-items: center;
+}
+
+.kai-list-item__thumb {
+  flex-shrink: 0;
+  margin-right: 0.8rem;
+}
+
+.kai-list-item__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- Avatar ---------------------------------------------------------- */
+
+/* A publisher's round avatar: drive file id in, cropped circle out. The image
+   itself is optional (no file id, no element), so an absent picture never
+   leaves a broken frame. */
+.kai-avatar {
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.kai-avatar--xs {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.kai-avatar--sm {
+  width: 3.2rem;
+  height: 3.2rem;
+}
+
+.kai-avatar--md {
+  width: 4.4rem;
+  height: 4.4rem;
+}
+
 /* --- Text field ----------------------------------------------------- */
 
 .kai-field {
@@ -349,11 +393,20 @@ body {
   width: 100%;
   padding: 0.7rem 0;
   border: 0;
-  border-bottom: 0.1rem solid var(--kai-color-border);
   background: transparent;
   color: var(--kai-color-text);
   font-family: inherit;
   font-size: 1.6rem;
+}
+
+/* The underline is the one-line field's affordance — the searchbar. The compose
+   body is a growing markdown box and carries no rule under it. (Longhands: a
+   shorthand carrying `var()` does not survive the smoke gate's jsdom cascade,
+   and the gate asserts this border.) */
+.kai-field__input--line {
+  border-bottom-width: 0.1rem;
+  border-bottom-style: solid;
+  border-bottom-color: var(--kai-color-border);
 }
 
 .kai-field__label {
@@ -373,9 +426,179 @@ body {
   font-size: var(--kai-fs-p-thi);
 }
 
-.kai-field__input:focus {
+.kai-field__input--line:focus {
   border-bottom-width: 0.2rem;
   border-bottom-color: var(--kai-color-accent);
+}
+
+/* The compose body is a textarea: same underline treatment, but it grows with
+   its content instead of scrolling internally — the view scrolls instead, so
+   a wheel-less handset can still reach the whole draft. */
+.kai-field__textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 6.4rem;
+  line-height: 1.5;
+}
+
+/* --- Compose ---------------------------------------------------------- */
+
+/* A picked file in the draft: thumbnail on the left, name and remove hint on
+   the right. The base row is a vertical flex; the thumbnail needs a row.
+   (No flex `gap`: that is Firefox 63+, and KaiOS 2.5 is Gecko 48.) */
+.kai-compose-attachment {
+  flex-direction: row;
+  align-items: center;
+}
+
+.kai-compose-attachment__thumb {
+  flex-shrink: 0;
+  width: 3.6rem;
+  height: 3.6rem;
+  margin-right: 0.8rem;
+  object-fit: cover;
+  border: 0.1rem solid var(--kai-color-border);
+}
+
+.kai-compose-attachment__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The name (`image_picker_<uuid>.jpg`) runs longer than a 240px row; clamp the
+   tile's title line to one. Ellipsis, not `-webkit-line-clamp`: Gecko 48 has
+   neither the clamp nor `display: -webkit-box`. Overflow alone also makes the
+   flex item shrink past its content (the automatic minimum applies only while
+   overflow is visible), so the ellipsis has room to appear. */
+.kai-compose-attachment .kai-list-item__primary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Play icon ----------------------------------------------------------- */
+
+/* The play badge: a white triangle in a translucent circle. Small on video
+   thumbnails (see the attachment frame above), large as the lightbox's paused
+   indicator. */
+.kai-play-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
+.kai-play-icon svg {
+  width: 1.6rem;
+  height: 1.6rem;
+  fill: currentColor;
+  /* The triangle's centroid sits left of the circle's; nudge it back. */
+  margin-left: 0.2rem;
+}
+
+.kai-play-icon--lg {
+  width: 5.6rem;
+  height: 5.6rem;
+}
+
+.kai-play-icon--lg svg {
+  width: 2.8rem;
+  height: 2.8rem;
+  margin-left: 0.3rem;
+}
+
+/* --- Lightbox ----------------------------------------------------------- */
+
+/* A dark viewer for a post's attachments: the first picture is the post, and
+   Enter here shows it whole — with zoom and pan for images, playback for
+   videos, and LEFT/RIGHT to move through the set. The stage is the selected
+   element; the counter sits pinned under it. */
+.kai-lightbox {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: #000;
+  color: #fff;
+}
+
+.kai-lightbox__stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* At fit the media stays contained; zoomed, the inline width/height and pan
+   transform take over, so the contain rules have to stand down. */
+.kai-lightbox__media {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.kai-lightbox__media--zoomed {
+  max-width: none;
+  max-height: none;
+}
+
+.kai-lightbox__line {
+  color: #d0d3d9;
+  padding: var(--kai-gutter);
+  text-align: center;
+}
+
+.kai-lightbox__counter {
+  flex: 0 0 auto;
+  padding: 0.6rem 0;
+  text-align: center;
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-lightbox__hint {
+  flex: 0 0 auto;
+  padding: 0 0 0.6rem;
+  text-align: center;
+  font-size: var(--kai-fs-p-thi);
+  color: #d0d3d9;
+}
+
+/* The video fills the stage; the paused badge and the progress bar sit on
+   top of it. */
+.kai-lightbox__video {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.kai-lightbox__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.kai-lightbox__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.4rem;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.kai-lightbox__progress-fill {
+  display: block;
+  height: 100%;
+  background: #fff;
 }
 
 /* --- Loading indicator ---------------------------------------------- */
@@ -462,7 +685,14 @@ body {
   border-radius: 0;
   box-shadow: none;
   background: transparent;
-  font-size: 2rem;
+}
+
+/* The direction glyph is a lucide icon now; centre it in the cell. */
+.kai-pager__nav .kai-list-item__icon,
+.kai-pager__glyph {
+  width: 2rem;
+  height: 2rem;
+  margin: auto;
 }
 
 .kai-pager__nav .kai-list-item[nav-selected="true"] {
@@ -478,7 +708,6 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--kai-color-text-muted);
-  font-size: 2rem;
 }
 
 .kai-pager__status {
@@ -567,13 +796,35 @@ li.kai-post:not([nav-selected="true"]),
   background: transparent;
 }
 
+/*
+ * A lone row pinned under the header — the compose "Post as" row. The flat
+ * list keeps the full-bleed row treatment; this only closes the leading gap
+ * and drops the hairline over the one row it holds. Placed after `.kai-list`
+ * and the flat row rules so it wins the specificity tie.
+ */
+.kai-list--flush {
+  margin: 0;
+}
+
+.kai-list--flush .kai-list-item:first-child {
+  border-top: 0;
+}
+
 li.kai-post[nav-selected="true"] {
   background: var(--kai-color-accent);
   color: var(--kai-color-on-accent);
 }
 
 .kai-post__author {
+  display: flex;
+  align-items: center;
   font-size: var(--kai-fs-p-pri);
+}
+
+/* The avatar leads the name; the children space themselves (no flex `gap` on
+   Gecko 48). */
+.kai-post__author .kai-avatar {
+  margin-right: 0.6rem;
 }
 
 .kai-post__title {
@@ -705,6 +956,29 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
 
 .kai-attachment__image {
   margin-top: 0.4rem;
+  /* The BlurHash decodes to one 32×32 wash (see `src/kaios/blur.ts`), and a
+     background image defaults to `repeat`: the reserved box would show that
+     little square — the whole picture in miniature — tiled across itself
+     instead of one soft wash. Stretch the single decode to cover the box,
+     centred, so it lines up with how `object-fit: cover` crops the picture
+     that lands on top of it. */
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* A picture (or a video's poster frame) with the play badge centred on it:
+   the badge needs a positioned box of the image's own size. */
+.kai-attachment__frame {
+  display: block;
+  position: relative;
+}
+
+.kai-attachment__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /*
@@ -738,6 +1012,32 @@ li.kai-post .kai-attachment__image {
   margin-right: 0.6rem;
 }
 
+/* Reaction pills: a post's top reactions as the bundled sticker and its
+   count, the same shape the watch app's post cards use. Custom reactions
+   (no bundled sticker) stay with the plain count text. */
+.kai-reactions {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+/* No `gap` on Gecko 48: the pills space themselves. */
+.kai-reaction {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.6rem;
+}
+
+.kai-reaction__img {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.kai-reaction__count {
+  margin-left: 0.4rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
 .kai-post__tags {
   font-size: var(--kai-fs-p-thi);
 }
@@ -754,6 +1054,11 @@ li.kai-post[nav-selected="true"] .kai-post__quote-attach,
 li.kai-post[nav-selected="true"] .kai-post__attach,
 li.kai-post[nav-selected="true"] .kai-post__attach-kind,
 li.kai-post[nav-selected="true"] .kai-post__counts {
+  color: var(--kai-color-on-accent);
+}
+
+/* The detail screen's body is a div, not a list row; both carry the class. */
+.kai-post[nav-selected="true"] .kai-reaction__count {
   color: var(--kai-color-on-accent);
 }
 
@@ -952,4 +1257,220 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-sec);
   line-height: 1;
+}
+
+/* --- Reaction picker -------------------------------------------------- */
+
+/* The 5×3 grid of reaction stickers. One selectable owns the grid and the
+   D-pad moves a cursor across the tiles; Enter reacts with the highlighted
+   sticker. */
+.kai-reaction-grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding-top: 0.4rem;
+}
+
+.kai-reaction-tile {
+  position: relative;
+  box-sizing: border-box;
+  width: 20%;
+  height: 5.2rem;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+}
+
+.kai-reaction-tile__img {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto;
+}
+
+/* A reaction the signed-in user has made is tinted and carries a check, like
+   the main app's sheet. The tint sits under the cursor's solid accent, so the
+   made rules come first and the selected rule wins the tie. */
+.kai-reaction-tile--made {
+  background: rgba(94, 106, 158, 0.18);
+  border-radius: var(--kai-radius);
+}
+
+.kai-reaction-tile--made .kai-reaction-tile__count {
+  color: var(--kai-color-accent);
+}
+
+.kai-reaction-tile__check {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.3rem;
+  color: var(--kai-color-accent);
+  font-size: var(--kai-fs-p-sec);
+  font-weight: var(--kai-fw-semibold);
+}
+
+/* The highlighted tile inverts like a selected list row; the count badge
+   comes with it so it never turns accent-on-accent. */
+.kai-reaction-tile--selected {
+  background: var(--kai-color-accent);
+  border-radius: var(--kai-radius);
+}
+
+.kai-reaction-tile--selected .kai-reaction-tile__count {
+  color: var(--kai-color-on-accent);
+}
+
+.kai-reaction-tile--selected .kai-reaction-tile__check {
+  color: var(--kai-color-on-accent);
+}
+
+.kai-reaction-tile__count {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.3rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* --- Option menu -------------------------------------------------------- */
+
+/* The design guide's Option Menu: a self-contained sheet over the current
+   view, so an action runs without leaving it. The scrim dims what is
+   underneath; the sheet carries its own title bar, list and softkey bar —
+   the same chrome a screen has, anchored to the bottom. */
+.kai-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.kai-option-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--kai-color-bg);
+}
+
+/* The sheet's title bar, mirroring the header's look so the sheet reads as
+   the current screen's chrome rather than a floating box. */
+.kai-option-menu__header {
+  display: flex;
+  align-items: center;
+  height: var(--kai-header-height);
+  padding: 0 var(--kai-gutter);
+  color: var(--kai-color-on-accent);
+  background: var(--kai-color-accent);
+  font-size: var(--kai-fs-h3);
+  font-weight: var(--kai-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kai-option-menu__item {
+  display: block;
+  width: 100%;
+  height: 4rem;
+  padding: 0 var(--kai-gutter);
+  border: 0;
+  border-top: 0.1rem solid var(--kai-color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--kai-color-text);
+  font-family: var(--kai-font-family);
+  font-size: var(--kai-fs-p-pri);
+  text-align: left;
+}
+
+.kai-option-menu__item--selected {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+/* The sheet's own softkey bar, the same shape as the app's. */
+.kai-option-menu__softkey {
+  display: flex;
+  align-items: center;
+  height: var(--kai-softkey-height);
+  padding: 0 0.5rem;
+  background: #fff;
+  border-top: 0.2rem solid var(--kai-color-border);
+  white-space: nowrap;
+}
+
+.kai-option-menu__key {
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--kai-color-text);
+  font-size: var(--kai-fs-h5);
+  font-weight: var(--kai-fw-semibold);
+  text-overflow: ellipsis;
+}
+
+.kai-option-menu__key--left {
+  text-align: left;
+  padding-right: 0.5rem;
+}
+
+.kai-option-menu__key--center {
+  flex: 0 0 auto;
+  max-width: 12rem;
+  text-align: center;
+  font-size: 1.8rem;
+  text-transform: uppercase;
+}
+
+.kai-option-menu__key--right {
+  text-align: right;
+  padding-left: 0.5rem;
+}
+
+/* --- Compose media toolbar ---------------------------------------------- */
+
+/* The capture-source row: one icon button per source (camera, recorder,
+   gallery), walked by the D-pad like the pager's cells. No `gap` on Gecko 48:
+   the buttons space themselves. */
+.kai-compose-media {
+  display: flex;
+  margin-top: 0.6rem;
+}
+
+.kai-icon-button {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 5rem;
+  margin: 0 0.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--kai-radius);
+  background: transparent;
+  color: var(--kai-color-text-muted);
+  font-family: var(--kai-font-family);
+}
+
+/* An icon-only row (labels hidden) is just the tap target around the glyph. */
+.kai-icon-button--icon-only {
+  height: 4rem;
+}
+
+/* The highlighted tool inverts like a selected list row. */
+.kai-icon-button[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-icon-button__icon {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.kai-icon-button__label {
+  margin-top: 0.3rem;
+  font-size: var(--kai-fs-p-thi);
 }

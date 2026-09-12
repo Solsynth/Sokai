@@ -208,6 +208,12 @@ Two lessons about the gate itself:
   character; otherwise it goes up one level; at the top level it leaves the app. The app must
   therefore *not* consume it in a text field, and must not consume it at the top level either —
   unhandled is the correct handling.
+- **The D-pad's caret claim in a text field is bounded by the text.** The guide gives the arrows
+  to the caret (and Back to clearing), which the handler honours while the caret has a line to
+  move to — a one-line `<input>` never does, and a `<textarea>` only where a newline lies on that
+  side of the caret. At the edge the highlight takes the press and `select()` moves focus off the
+  field. Without that bound the field is a trap: it is focused as soon as the highlight lands on
+  it, so every arrow press was swallowed and nothing else on the screen could ever be reached.
 - **The D-pad contract in KaiOS's own samples** is a `[nav-selectable]` attribute plus
   `nav-selected="true"` on the highlighted element, and a softkey bar of `#softkey` with
   left/centre/right labels. This project keeps those attributes for CSS/tooling compatibility

@@ -23,7 +23,6 @@ import { onMounted } from 'vue';
 import KaiHeader from '~/src/components/KaiHeader.vue';
 import { t } from '~/src/kaios/l10n.js';
 import { setBaseSoftkeys } from '~/src/kaios/nav.js';
-import { canGoBack, pop } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; About takes none.
 withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
@@ -37,8 +36,8 @@ const target = __KAIOS_TARGET__;
 const engine = navigator.userAgent;
 
 onMounted(() => {
-  setBaseSoftkeys(() => ({
-    left: canGoBack.value ? { label: t('action_back'), onPress: pop } : { label: '' },
-  }));
+  // The hardware Back key is the way up (the design guide's Back/Clear rule);
+  // no softkey duplicates it.
+  setBaseSoftkeys(() => ({}));
 });
 </script>

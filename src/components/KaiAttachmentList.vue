@@ -5,22 +5,29 @@
            what the row would otherwise have said in text. While the bytes are
            on the wire, the box shows its BlurHash wash (when the server sent
            one) behind the still-empty image; the reserved box means nothing
-           moves when the picture lands. -->
-      <img
+           moves when the picture lands. A video's poster frame carries the
+           play badge, so it reads as playable before the lightbox opens. -->
+      <span
         v-if="attachment.src && !failed[attachment.id]"
-        class="kai-attachment__image"
-        :src="attachment.src"
-        :width="attachment.width"
-        :height="attachment.height"
-        :style="attachment.blur ? { backgroundImage: 'url(' + attachment.blur + ')' } : null"
-        :alt="attachment.detail"
-        @error="fail(attachment.id)"
-      />
+        class="kai-attachment__frame"
+      >
+        <img
+          class="kai-attachment__image"
+          :src="attachment.src"
+          :width="attachment.width"
+          :height="attachment.height"
+          :style="attachment.blur ? { backgroundImage: 'url(' + attachment.blur + ')' } : null"
+          :alt="attachment.detail"
+          @error="fail(attachment.id)"
+        />
+        <KaiPlayIcon v-if="attachment.kind === 'video'" class="kai-attachment__play" />
+      </span>
 
       <!-- A picture's caption is optional: the detail screen shows the picture
            whole and needs no line under it, while a row summarises with one.
-           Non-picture attachments always keep their line — a document has only
-           text to be. A failed picture falls back to its line either way. -->
+           A video's poster frame counts as a picture here. Anything else —
+           a document, a video the server has no frame for — has only its
+           text line to be. A failed picture falls back to its line either way. -->
       <p v-if="showCaptions || !attachment.src || failed[attachment.id]" class="kai-post__attach">
         <span class="kai-post__attach-kind">[{{ t(attachment.kindKey) }}]</span>
         {{ attachment.detail }}
@@ -36,8 +43,9 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue';
 
-import { attachmentKindKey, describeAttachment, type Attachment } from '~/src/api/models.js';
-import { fileUrl } from '~/src/api/solian.js';
+import { attachmentKindKey, describeAttachment, type Attachment, type AttachmentKind } from '~/src/api/models.js';
+import { fileUrl, thumbnailUrl } from '~/src/api/solian.js';
+import KaiPlayIcon from '~/src/components/KaiPlayIcon.vue';
 import { placeholderDataUrl } from '~/src/kaios/blur.js';
 import { t } from '~/src/kaios/l10n.js';
 
@@ -54,6 +62,7 @@ const props = withDefaults(
 
 interface ShownAttachment {
   id: string;
+  kind: AttachmentKind;
   kindKey: string;
   detail: string;
   src: string;
@@ -73,11 +82,17 @@ const shown = computed<ShownAttachment[]>(() => {
   const list = props.limit > 0 ? props.attachments.slice(0, props.limit) : props.attachments;
   return list.map((attachment) => ({
     id: attachment.id,
+    kind: attachment.kind,
     kindKey: attachmentKindKey(attachment.kind),
     detail: describeAttachment(attachment),
-    // Only pictures have something to show; a video poster would need the
-    // platform's own thumbnail, which exists for one file in ninety.
-    src: attachment.kind === 'image' ? fileUrl(attachment.id) : '',
+    // Pictures load their own bytes; a video would cost megabytes, so it gets
+    // the server's poster frame instead — a small image, same as a picture.
+    src:
+      attachment.kind === 'image'
+        ? fileUrl(attachment.id)
+        : attachment.kind === 'video'
+          ? thumbnailUrl(attachment.id)
+          : '',
     width: attachment.width,
     height: attachment.height,
     // Decoded once per hash and cached: a feed page full of the same picture

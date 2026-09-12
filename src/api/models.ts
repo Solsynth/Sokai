@@ -24,6 +24,16 @@ export interface Author {
   name: string;
   nick: string | null;
   display: string;
+  /** Drive file id of the avatar, or null when the publisher has none. */
+  picture: string | null;
+}
+
+/** A post publisher, as the composer's identity list needs it. */
+export interface Publisher {
+  name: string;
+  nick: string | null;
+  display: string;
+  picture: string | null;
 }
 
 export interface Attachment {
@@ -80,6 +90,8 @@ export interface Post {
   isTruncated: boolean;
   counts: PostCounts;
   reactions: Record<string, number>;
+  /** Which reactions the signed-in user has made: `{ symbol: boolean }`. */
+  reactionsMade: Record<string, boolean>;
   tags: string[];
   attachments: Attachment[];
   author: Author;
@@ -101,12 +113,49 @@ export interface Countdown {
   isOngoing: boolean;
 }
 
+/**
+ * The avatar's drive file id: publishers carry it as `picture.id`, accounts as
+ * `profile.picture.id` — the fallback covers account-shaped objects.
+ */
+function pictureIdOf(raw: RawRecord): string | null {
+  const picture = raw.picture;
+  if (picture && typeof picture === 'object' && typeof (picture as RawRecord).id === 'string') {
+    return (picture as RawRecord).id as string;
+  }
+  const profile = raw.profile;
+  if (profile && typeof profile === 'object') {
+    const profilePicture = (profile as RawRecord).picture;
+    if (
+      profilePicture &&
+      typeof profilePicture === 'object' &&
+      typeof (profilePicture as RawRecord).id === 'string'
+    ) {
+      return (profilePicture as RawRecord).id as string;
+    }
+  }
+  return null;
+}
+
 function normalizeAuthor(raw: unknown): Author {
   const publisher = raw && typeof raw === 'object' ? (raw as RawRecord) : {};
   const name = typeof publisher.name === 'string' ? publisher.name : '';
   const nick = typeof publisher.nick === 'string' ? publisher.nick : '';
 
-  return { name, nick: nick || null, display: nick || name };
+  return { name, nick: nick || null, display: nick || name, picture: pictureIdOf(publisher) };
+}
+
+/** Drops anything without a name. */
+export function normalizePublisherList(raw: unknown): Publisher[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => normalizeAuthor(item))
+    .filter((publisher): publisher is Publisher => publisher.name !== '')
+    .map((publisher) => ({
+      name: publisher.name,
+      nick: publisher.nick,
+      display: publisher.display,
+      picture: publisher.picture,
+    }));
 }
 
 function normalizeReference(raw: unknown): PostReference | null {
@@ -190,7 +239,7 @@ const KILOBYTE = 1024;
 const MEGABYTE = 1048576;
 
 /** Locale-neutral on purpose: `Intl` is not worth its bytes on Gecko 48. */
-function formatBytes(size: number): string {
+export function formatBytes(size: number): string {
   if (typeof size !== 'number' || size <= 0) return '';
   if (size < KILOBYTE) return size + ' B';
   if (size < MEGABYTE) {
@@ -351,6 +400,18 @@ export function normalizePost(raw: unknown): Post | null {
     reactions[symbols[index]] = rawReactions[symbols[index]];
   }
 
+  // The server only sends `reactions_made` for the signed-in user's own reads;
+  // anonymous responses carry neither the key nor a use for it.
+  const reactionsMade: Record<string, boolean> = {};
+  const rawMade =
+    source.reactions_made && typeof source.reactions_made === 'object'
+      ? (source.reactions_made as RawRecord)
+      : {};
+  const madeSymbols = Object.keys(rawMade);
+  for (let index = 0; index < madeSymbols.length; index += 1) {
+    reactionsMade[madeSymbols[index]] = Boolean(rawMade[madeSymbols[index]]);
+  }
+
   return {
     id: String(source.id),
     slug: source.slug || null,
@@ -376,6 +437,7 @@ export function normalizePost(raw: unknown): Post | null {
       views: source.views_total || 0,
     },
     reactions,
+    reactionsMade,
     tags: normalizeTags(source.tags),
     attachments: normalizeAttachments(source.attachments),
     author: normalizeAuthor(source.publisher),

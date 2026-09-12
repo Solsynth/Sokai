@@ -89,7 +89,7 @@ import { setBaseSoftkeys } from '~/src/kaios/nav.js';
 import { qrDataUrl } from '~/src/kaios/qrcode.js';
 import { cancelSignIn, signOut, startSignIn } from '~/src/kaios/session.js';
 import { useAccountStore } from '~/src/stores/account.js';
-import { canGoBack, pop, push } from '~/src/kaios/views.js';
+import { push } from '~/src/kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Account takes none.
 withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
@@ -115,8 +115,8 @@ const qrData = computed(() => {
 });
 
 onMounted(() => {
+  // The hardware Back key is the way up (the design guide's Back/Clear rule).
   setBaseSoftkeys(() => ({
-    left: canGoBack.value ? { label: t('action_back'), onPress: pop } : { label: '' },
     center: { label: t('action_open') },
     // The code is dead the moment the flow is cancelled: offer the way out
     // while the user is still waiting for the other device.
