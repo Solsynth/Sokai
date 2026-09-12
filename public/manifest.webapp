@@ -21,6 +21,12 @@
   "permissions": {
     "systemXHR": {
       "description": "Required to load remote content"
+    },
+    "audio-capture": {
+      "description": "Required to record voice messages in the app"
+    },
+    "speech-recognition": {
+      "description": "Required to dictate messages with the platform's speech service"
     }
   },
   "installs_allowed_from": [
@@ -33,6 +39,12 @@
       "permissions": {
         "systemXHR": {
           "description": "Necesario para cargar contenido remoto"
+        },
+        "audio-capture": {
+          "description": "Necesario para grabar mensajes de voz en la aplicación"
+        },
+        "speech-recognition": {
+          "description": "Necesario para dictar mensajes con el servicio de voz del sistema"
         }
       }
     }

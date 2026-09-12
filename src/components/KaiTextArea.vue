@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 
@@ -25,8 +25,12 @@ const props = withDefaults(
     modelValue?: string;
     label: string;
     placeholder?: string;
+    /** Eligible for the highlight when a screen mounts. The compose body is
+     *  the screen's primary control and marks itself; the chat composer sits
+     *  under a thread that should keep the initial highlight. */
+    initial?: boolean;
   }>(),
-  { modelValue: '', placeholder: '' },
+  { modelValue: '', placeholder: '', initial: true },
 );
 
 const emit = defineEmits<{
@@ -54,13 +58,28 @@ function onInput(event: Event): void {
   grow(el);
 }
 
+/**
+ * A value written without an `input` event — a dictated phrase landing in the
+ * draft, a draft restored from the store — still has to grow the field: the
+ * platform fires `input` only for keystrokes, and the view scrolls instead of
+ * the field, so a clipped value would be unreachable. `flush: 'post'` measures
+ * after the patch, when the textarea already holds the new text.
+ */
+watch(
+  () => props.modelValue,
+  () => {
+    if (root.value) grow(root.value);
+  },
+  { flush: 'post' },
+);
+
 onMounted(() => {
   uid.value = registerSelectable({
     el: root,
     // No onEnter: in a textarea the centre key is the platform's newline
     // (`keys.ts` leaves Enter to the platform there), and the compose screen's
     // write action is the right softkey, not the centre key.
-    initial: true,
+    initial: props.initial,
   });
   if (root.value) grow(root.value);
 });

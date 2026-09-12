@@ -67,6 +67,7 @@ import { t } from '~/src/kaios/l10n.js';
 import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
 import { push } from '~/src/kaios/views.js';
 import { useAccountStore } from '~/src/stores/account.js';
+import { useChatStore } from '~/src/stores/chat.js';
 import { useFeedStore } from '~/src/stores/feed.js';
 
 const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
@@ -74,6 +75,7 @@ const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
 });
 
 const accountStore = useAccountStore();
+const chat = useChatStore();
 
 /** The grid is five tiles wide; the fifteen templates make exactly three rows. */
 const COLS = 5;
@@ -168,8 +170,9 @@ function onKeydown(event: KeyboardEvent): void {
 
 /**
  * Reacts with the template at `index`. The endpoint toggles, so the local
- * counts follow the answer: added bumps the tile, removed (204) drops it —
- * the caller's feed picks the fresh state up when it reloads on return.
+ * counts follow the answer: added bumps the tile, removed (204) drops it.
+ * The caller's feed picks the fresh state up when it reloads on return; a
+ * chat reaction updates the thread row in the chat store instead.
  */
 async function react(index: number): Promise<void> {
   if (reacting.value || !props.params.id) return;
@@ -178,7 +181,11 @@ async function react(index: number): Promise<void> {
   reacting.value = true;
   errorKey.value = '';
   try {
-    const added = await reactToPost(props.params.id, template.symbol, template.attitude);
+    // The `room` param makes this the chat message picker: the message id
+    // rides in `id`, and the store updates the thread the bubble lives in.
+    const added = props.params.room
+      ? await chat.react(props.params.room, props.params.id, template.symbol, template.attitude)
+      : await reactToPost(props.params.id, template.symbol, template.attitude);
     const next = { ...counts.value };
     if (added) {
       next[template.symbol] = (next[template.symbol] || 0) + 1;
@@ -197,7 +204,7 @@ async function react(index: number): Promise<void> {
     made.value = nextMade;
 
     // The post's counts changed; the feed that shows it refetches on return.
-    useFeedStore().markStale();
+    if (!props.params.room) useFeedStore().markStale();
   } catch (error) {
     // A dead session surfaces the sign-in gate; anything else is a network
     // failure the user can retry by pressing the same sticker again.

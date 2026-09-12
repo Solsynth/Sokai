@@ -60,8 +60,16 @@ const props = withDefaults(
     /** Eligible for the highlight when the screen mounts: the feed marks the
      *  row it restores so a Back returns to the same place in the timeline. */
     initial?: boolean;
+    /**
+     * Whether the row may repeat the post it replies to. A reply list turns it
+     * off for a reply whose parent is already on the screen: the quote then
+     * says a second time what the reader can see above. A forward's quote is
+     * never the parent in that conversation — the quote *is* the forward — so
+     * it is not affected.
+     */
+    showReplyReference?: boolean;
   }>(),
-  { initial: true },
+  { initial: true, showReplyReference: true },
 );
 
 const emit = defineEmits<{
@@ -93,8 +101,11 @@ const kind = computed(() => postKindKey(props.post.kind));
 const visibility = computed(() => visibilityKey(props.post.visibility));
 
 // A reply quotes its parent the same way a forward quotes its source; only the
-// label differs.
-const quote = computed(() => props.post.forwardedFrom || props.post.repliedTo);
+// label differs. The replied-to quote is the one a list can suppress: the row
+// only says it when the parent is not already on the screen.
+const quote = computed(() =>
+  props.post.forwardedFrom || (props.showReplyReference ? props.post.repliedTo : null),
+);
 const quoteLabelKey = computed(() =>
   props.post.forwardedFrom ? 'post_forwarded_from' : 'post_replied_to',
 );
@@ -106,6 +117,9 @@ const counts = computed(() => {
   const { replies, boosts, reactions } = props.post.counts;
   if (replies) list.push({ key: 'post_count_replies', n: replies });
   if (boosts) list.push({ key: 'post_count_boosts', n: boosts });
+  // The head's chain: the members are not rows of their own, so this is where
+  // a row says the post carries on.
+  if (props.post.chainedCount) list.push({ key: 'post_count_chain', n: props.post.chainedCount });
   // The sticker pills render the known reactions individually; the kinds count
   // is only for reactions without a bundled sticker (custom ones).
   if (reactions && !chips.value.length) list.push({ key: 'post_count_reactions', n: reactions });

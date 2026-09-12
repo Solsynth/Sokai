@@ -34,3 +34,20 @@ export function pop(): void {
     writeStackHash(stack.value);
   }
 }
+
+/**
+ * Pops back to a screen several entries down, which `pop` repeated cannot do
+ * honestly: a detour that pushes more than one entry (the sticker picker, a
+ * pack inside it) would need its depth known to the caller. A name that is not
+ * on the stack leaves it alone, so a caller cannot pop past the screen it
+ * asked for and land somewhere unrelated.
+ */
+export function popTo(name: string): void {
+  for (let index = stack.value.length - 1; index >= 0; index -= 1) {
+    if (stack.value[index].name !== name) continue;
+    if (index === stack.value.length - 1) return;
+    stack.value = stack.value.slice(0, index + 1);
+    writeStackHash(stack.value);
+    return;
+  }
+}

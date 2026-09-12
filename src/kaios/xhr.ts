@@ -6,14 +6,14 @@ export interface ApiResponse {
   data: unknown;
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
   timeout?: number;
 }
 
-interface HttpError extends Error {
+export interface HttpError extends Error {
   status: number;
   code?: string;
   error?: string;

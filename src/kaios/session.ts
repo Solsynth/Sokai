@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '~/src/api/solian.js';
+import { API_BASE_URL, authedRequest } from '~/src/api/solian.js';
 import { request } from '~/src/kaios/xhr.js';
 import { useAccountStore, type Account, type AccountProfile } from '~/src/stores/account.js';
 
@@ -57,6 +57,8 @@ let expiresAt = 0;
  * captures the generation and stops acting once it no longer matches.
  */
 let pollGeneration = 0;
+/** The refresh exchange in flight, if any; see `refreshOnce`. */
+let refreshInFlight: Promise<void> | null = null;
 
 interface StoredSession {
   accessToken?: unknown;
@@ -162,22 +164,53 @@ function clearStoredSession(): void {
  * A refresh rejected as `invalid_grant` means the session is dead server-side:
  * it is dropped and `null` returned. Any other refresh failure is transient, so
  * the cached token is sent anyway and the request surfaces the outcome itself.
+ *
+ * `forceRefresh` mints a new token even when the stored one still looks live.
+ * Only the refused request can discover a session the server has stopped
+ * accepting, and that request is what asks for it — see `authedRequest`.
  */
-export async function bearerToken(): Promise<string | null> {
+export async function bearerToken(forceRefresh = false): Promise<string | null> {
   if (!accessToken) return null;
-  if (expiresAt - Date.now() > REFRESH_BEFORE_MS) return accessToken;
+  if (!forceRefresh && expiresAt - Date.now() > REFRESH_BEFORE_MS) return accessToken;
   if (!refreshToken) return accessToken;
 
+  await refreshOnce();
+  return accessToken;
+}
+
+/**
+ * Exchanges the refresh token, one exchange at a time.
+ *
+ * A single launch asks for a bearer more than once in the same turn — the
+ * background profile fetch and the dashboard's countdown fetch — and so does
+ * any screen switch that overlaps one. Unguarded, each posts the *same* refresh
+ * token: Stargate may rotate it on use, which turns the loser of that race into
+ * an `invalid_grant` and drops a session that is perfectly alive. It is also
+ * two round trips where one will do, on a handset that can least afford them.
+ * Callers arriving mid-exchange await that one instead of starting another.
+ */
+async function refreshOnce(): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = exchangeRefresh();
   try {
-    const pair = await refresh(refreshToken);
-    storePair(pair);
-    return accessToken;
+    await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+/**
+ * The exchange itself: installs the new pair, or drops a session the server has
+ * rejected. A transient failure leaves the cached token in place, so the
+ * request that needed it still goes out and reports its own outcome.
+ */
+async function exchangeRefresh(): Promise<void> {
+  const token = refreshToken;
+  if (!token) return;
+  try {
+    storePair(await refresh(token));
   } catch (error) {
-    if (error && (error as FlowError).error === 'invalid_grant') {
-      dropSession();
-      return null;
-    }
-    return accessToken;
+    if (error && (error as FlowError).error === 'invalid_grant') dropSession();
   }
 }
 
@@ -409,9 +442,11 @@ async function refreshProfile(generation: number): Promise<void> {
   try {
     const token = await bearerToken();
     if (!token || generation !== pollGeneration) return;
-    const response = await request(API_BASE_URL + '/stargate/accounts/me', {
-      headers: { Accept: 'application/json', Authorization: 'Bearer ' + token },
-    });
+    // Through the API layer's authenticated call rather than a hand-built
+    // header: this is the fetch that discovers a session the server has
+    // stopped accepting (the stored bearer is refused, and only a forced
+    // refresh can tell a revoked session from a live one).
+    const response = await authedRequest(API_BASE_URL + '/stargate/accounts/me');
     const account = normalizeAccount(response.data);
     if (generation !== pollGeneration || !account) return;
     useAccountStore().account = account;

@@ -6,31 +6,41 @@
       <!--
         The hero is the clock. It needs nothing from the network, so the screen
         has something alive on it before any request resolves — and it sits on
-        the background, not on a card. The mark and time share one baseline;
-        the date is a quiet caption under them. Below the dawn line — a hairline
-        with one accent dot straddling it, the sun on the horizon — the
-        countdown names the next event; it is fetched separately so the clock
-        never waits on it.
+        the background, not on a card. The time and the date share one line and
+        one baseline: the date is the clock's caption, set to its right and led
+        by the weekday because that is the part of a date you actually look up.
       -->
       <div class="kai-hero">
         <div class="kai-hero__line">
-          <img class="kai-hero__mark" src="/img/icons/icon-mark-dark.png" alt="" />
           <p class="kai-hero__time">{{ time }}</p>
+          <p class="kai-hero__date">{{ weekday }} · {{ date }}</p>
         </div>
-        <p class="kai-hero__date">{{ date }}</p>
-        <p v-if="countdown" class="kai-hero__countdown">
-          <span class="kai-hero__dawn"></span>{{ countdown.title }} · {{ countdownText }}
-        </p>
       </div>
 
-      <!-- Everything the app can do that is not the post list. Adding a screen
-           means adding a row here and a view to `App.vue`. -->
+      <!--
+        One tile per thing the app does. The first is the next event — or the
+        absence of one — read the way the calendar screen's agenda rows read
+        it: the countdown beside the name, the day and span under them. The
+        tile is the way into that screen, so the glance itself is the way in.
+        Adding a screen means adding a row here and a view to `App.vue`.
+
+        The entries take the highlight on mount; the calendar tile is above
+        them, so UP reaches it.
+      -->
       <KaiList class="kai-list--flat">
+        <KaiListItem class="kai-next-event" :secondary="nextWhen" @select="openCalendar">
+          <template #primary>
+            <span>{{ nextTitle }}</span>
+            <span v-if="eta" class="kai-next-event__eta">{{ eta }}</span>
+          </template>
+        </KaiListItem>
+
         <KaiListItem
-          v-for="entry in ENTRIES"
+          v-for="(entry, index) in ENTRIES"
           :key="entry.view"
           :primary="t(entry.title)"
           :secondary="entry.view === 'account' ? accountDescription : t(entry.description)"
+          :initial="index === 0"
           @select="push(entry.view)"
         />
       </KaiList>
@@ -44,12 +54,19 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import KaiHeader from '~/src/components/KaiHeader.vue';
 import KaiList from '~/src/components/KaiList.vue';
 import KaiListItem from '~/src/components/KaiListItem.vue';
-import { countdownLabel, type Countdown } from '~/src/api/models.js';
+import {
+  countdownLabel,
+  dayKey,
+  formatClockRange,
+  todayKey,
+  weekdayIndex,
+  type Countdown,
+} from '~/src/api/models.js';
 import { listCountdowns } from '~/src/api/solian.js';
 import { t } from '~/src/kaios/l10n.js';
 import { setBaseSoftkeys } from '~/src/kaios/nav.js';
-import { useAccountStore } from '~/src/stores/account.js';
 import { push } from '~/src/kaios/views.js';
+import { useAccountStore } from '~/src/stores/account.js';
 
 // Every screen is mounted with its stack entry's parameters; the dashboard takes none.
 withDefaults(defineProps<{ params?: Record<string, string> }>(), { params: () => ({}) });
@@ -62,6 +79,8 @@ interface DashboardEntry {
 
 const ENTRIES: DashboardEntry[] = [
   { view: 'explore', title: 'nav_explore', description: 'nav_explore_desc' },
+  { view: 'chat', title: 'nav_chat', description: 'nav_chat_desc' },
+  { view: 'notifications', title: 'nav_notifications', description: 'nav_notifications_desc' },
   { view: 'account', title: 'nav_account', description: 'nav_account_desc' },
   { view: 'about', title: 'nav_about', description: 'nav_about_desc' },
 ];
@@ -82,6 +101,17 @@ const accountDescription = computed(() => {
 const SECOND_MS = 1000;
 const MINUTE_MS = 60000;
 
+/** Monday first, the order the calendar screen's own week runs in. */
+const WEEKDAYS = [
+  'calendar_dow_mon',
+  'calendar_dow_tue',
+  'calendar_dow_wed',
+  'calendar_dow_thu',
+  'calendar_dow_fri',
+  'calendar_dow_sat',
+  'calendar_dow_sun',
+];
+
 const time = ref('');
 const date = ref('');
 /** The countdown label is derived from this, so it advances on the same minute tick. */
@@ -90,10 +120,33 @@ const nowMs = ref(Date.now());
 const countdown = ref<Countdown | null>(null);
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-const countdownText = computed(() => {
+const weekday = computed(() => {
+  if (!date.value) return '';
+  return t(WEEKDAYS[weekdayIndex(date.value)]);
+});
+
+const eta = computed(() => {
   if (!countdown.value) return '';
   const label = countdownLabel(countdown.value, nowMs.value);
   return label ? t(label.key, label.args) : '';
+});
+
+const nextTitle = computed(() =>
+  countdown.value ? countdown.value.title : t('calendar_no_upcoming'),
+);
+
+/** The day the next event falls on, with its span — the same reading the
+ *  calendar screen's agenda rows use. */
+const nextWhen = computed(() => {
+  const event = countdown.value;
+  if (!event) return '';
+
+  const day = dayKey(event.startTime);
+  if (!day) return '';
+  if (event.isAllDay) return day + ' · ' + t('calendar_all_day');
+
+  const span = formatClockRange(event.startTime, event.endTime);
+  return span ? day + ' · ' + span : day;
 });
 
 function pad(value: number): string {
@@ -142,6 +195,16 @@ async function loadCountdown(): Promise<void> {
   } catch (error) {
     countdown.value = null;
   }
+}
+
+/**
+ * Opens the full calendar on the day the row is describing — the event it
+ * names, or today when there is nothing ahead — so the tap lands where the
+ * glance was pointing.
+ */
+function openCalendar(): void {
+  const event = countdown.value;
+  push('calendar', { date: (event && dayKey(event.startTime)) || todayKey() });
 }
 
 onMounted(() => {

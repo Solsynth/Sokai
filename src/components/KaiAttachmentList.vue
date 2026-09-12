@@ -87,8 +87,10 @@ const shown = computed<ShownAttachment[]>(() => {
     detail: describeAttachment(attachment),
     // Pictures load their own bytes; a video would cost megabytes, so it gets
     // the server's poster frame instead — a small image, same as a picture.
-    src:
-      attachment.kind === 'image'
+    // An explicit URL wins: a row that carries one is not addressed by id.
+    src: attachment.src
+      ? attachment.src
+      : attachment.kind === 'image'
         ? fileUrl(attachment.id)
         : attachment.kind === 'video'
           ? thumbnailUrl(attachment.id)

@@ -19,6 +19,9 @@
         {{ attachment.name }}
       </span>
       <span class="kai-list-item__secondary">
+        <!-- A recorded take leads with its length: that is what a voice note
+             is, and it is the only metadata the sender chose. -->
+        <span v-if="attachment.durationMs">{{ formatClock(attachment.durationMs) }} · </span>
         {{ formatBytes(attachment.size) }} · {{ t('compose_tap_to_remove') }}
       </span>
     </span>
@@ -28,7 +31,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { attachmentKindKey, formatBytes, type AttachmentKind } from '~/src/api/models.js';
+import { attachmentKindKey, formatBytes, formatClock, type AttachmentKind } from '~/src/api/models.js';
 import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 import { t } from '~/src/kaios/l10n.js';
 
@@ -40,6 +43,8 @@ const props = defineProps<{
     size: number;
     kind: AttachmentKind;
     preview: string;
+    /** A recorded take's length; 0 or absent for every other pick. */
+    durationMs?: number;
   };
 }>();
 

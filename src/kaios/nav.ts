@@ -37,6 +37,18 @@ interface SelectableEntry {
 
 const registry: SelectableEntry[] = [];
 
+/**
+ * Where the highlighted row was on screen when it left the registry. A row can
+ * legitimately vanish under the highlight — a thread's Load more row once the
+ * room's history runs out, a message deleted by a live event, a narrowed
+ * filter's row — and the highlight then belongs to whatever took its place. The
+ * fallback (`initial`) is the *screen mount* rule: applying it here would throw
+ * a thread's highlight to its newest message and scroll the reader to the
+ * bottom mid-page. Cleared when the registry empties, so a screen that mounts
+ * after another unmounts still starts on its own `initial` row.
+ */
+let vanishedTop: number | null = null;
+
 const DOCUMENT_POSITION_PRECEDING = 0x02;
 const DOCUMENT_POSITION_FOLLOWING = 0x04;
 
@@ -148,12 +160,28 @@ function refresh(): void {
     return;
   }
 
-  if (!list.some((entry) => entry.uid === nav.current)) {
-    // Primary content marks itself `initial`, so the highlight lands on the
-    // first post (or post body) rather than on whatever comes first in document
-    // order — the page-flip controls that sit above the feed.
-    select(list.find((entry) => entry.initial) || list[0]);
+  if (list.some((entry) => entry.uid === nav.current)) return;
+
+  // The highlighted row is gone. Its neighbour — the surviving row nearest
+  // where it was — takes the highlight, so a row that disappears under it does
+  // not move the view. Only a screen mount (no anchor) falls back to `initial`,
+  // which is what puts the highlight on a screen's primary content.
+  const anchor = vanishedTop;
+  vanishedTop = null;
+  let nearest: SelectableEntry | null = null;
+  if (anchor !== null) {
+    let best = Infinity;
+    for (let index = 0; index < list.length; index += 1) {
+      const node = list[index].el.value;
+      if (!node) continue;
+      const distance = Math.abs(node.getBoundingClientRect().top - anchor);
+      if (distance < best) {
+        best = distance;
+        nearest = list[index];
+      }
+    }
   }
+  select(nearest || list.find((entry) => entry.initial) || list[0]);
 }
 
 /**
@@ -182,7 +210,18 @@ export function registerSelectable({
 
 export function unregisterSelectable(uid: number): void {
   const index = registry.findIndex((entry) => entry.uid === uid);
-  if (index !== -1) registry.splice(index, 1);
+  if (index === -1) return;
+  const [entry] = registry.splice(index, 1);
+
+  // Read while the row is still attached: it is the anchor `refresh` hands the
+  // highlight to when the row that carried it is gone.
+  if (uid === nav.current && entry.el.value) {
+    vanishedTop = entry.el.value.getBoundingClientRect().top;
+  }
+  // A screen unmounting takes every entry with it; the next screen picks its
+  // own anchor, so this one must not outlive the screen it came from.
+  if (!registry.length) vanishedTop = null;
+
   scheduleRefresh();
 }
 

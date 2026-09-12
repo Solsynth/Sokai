@@ -31,7 +31,7 @@
         tabindex="-1"
         nav-selectable="true"
         :nav-selected="isBodySelected ? 'true' : 'false'"
-        class="kai-post"
+        class="kai-post kai-post--detail"
       >
         <KaiSpinner v-if="postStatus === 'loading'" :label="t('post_loading')" />
 
@@ -44,42 +44,79 @@
         </p>
 
         <template v-if="post">
-          <KaiPostQuote v-if="quote" :quote="quote" :label-key="quoteLabelKey" rich />
+          <!--
+            The post reads the way a feed row does — who wrote it, the facts of
+            its publication, then what it says. The quote stays under the body:
+            the post's own words come before the one it answers.
+          -->
+          <span class="kai-post__author">
+            <KaiAvatar :file="post.author.picture" size="md" />
+            <span>{{ post.author.display }}</span>
+            <span v-if="handle" class="kai-post__handle">&nbsp;@{{ handle }}</span>
+          </span>
+
+          <span class="kai-post__meta">
+            <span v-if="time" class="kai-post__time">{{ time }}</span>
+            <span v-if="kind">{{ t(kind) }}</span>
+            <span v-if="post.editedAt" class="kai-post__time">{{ t('post_edited') }}</span>
+            <span v-if="post.isTruncated" class="kai-post__time">{{ t('post_truncated') }}</span>
+            <span v-if="visibility" class="kai-post__visibility">{{ t(visibility) }}</span>
+          </span>
 
           <p v-if="post.title" class="kai-post__title">{{ post.title }}</p>
 
           <div class="kai-md" v-html="rendered"></div>
 
-          <span class="kai-post__author">
-            <KaiAvatar :file="post.author.picture" size="md" />
-            <span>{{ post.author.display }}</span>
-          </span>
+          <KaiPostQuote v-if="quote" :quote="quote" :label-key="quoteLabelKey" rich />
 
-          <span class="kai-post__meta">
-            <span v-if="handle" class="kai-post__handle">@{{ handle }}</span>
-            <span v-if="time" class="kai-post__time">{{ time }}</span>
-            <span v-if="kind">{{ t(kind) }}</span>
-            <span v-if="post.editedAt" class="kai-post__time">{{ t('post_edited') }}</span>
-            <span v-if="visibility" class="kai-post__visibility">{{ t(visibility) }}</span>
-            <span v-if="post.isTruncated" class="kai-post__time">{{ t('post_truncated') }}</span>
-            <span v-if="post.counts.replies" class="kai-post__count">
-              {{ t('post_count_replies', { n: post.counts.replies }) }}
-            </span>
-            <span v-if="post.counts.boosts" class="kai-post__count">
-              {{ t('post_count_boosts', { n: post.counts.boosts }) }}
-            </span>
-            <span v-if="post.counts.reactions && !chips.length" class="kai-post__count">
-              {{ t('post_count_reactions', { n: post.counts.reactions }) }}
-            </span>
-            <span v-for="tag in post.tags" :key="tag" class="kai-tag">{{ tag }}</span>
+          <!--
+            A chain member names what it continues. Its head is the post this
+            one extends, so the reference is the way up the thread; on the head
+            itself there is nothing to name.
+          -->
+          <KaiPostQuote
+            v-if="post.chainedTo"
+            :quote="post.chainedTo"
+            label-key="post_chained_to"
+            rich
+          />
+
+          <span v-if="counts.length" class="kai-post__counts">
+            <span v-for="count in counts" :key="count.key">{{ t(count.key, { n: count.n }) }}</span>
           </span>
 
           <KaiReactionChips :reactions="post.reactions" />
+
+          <span v-if="post.tags.length" class="kai-post__tags">
+            <span v-for="tag in post.tags" :key="tag" class="kai-tag">{{ tag }}</span>
+          </span>
         </template>
       </div>
 
       <template v-if="post">
         <p v-if="deleteErrorKey" class="kai-text kai-text--error">{{ t(deleteErrorKey) }}</p>
+
+        <!--
+          The post's own continuation stays with it: a chain member is this post
+          carried on, not a reply to it, so it reads under the body and before
+          the conversation — the order the Solian client threads it in. A
+          member's own quote follows the same rule the replies use: it only
+          names a parent that is not already on the screen, and the head it
+          continues is the post directly above it.
+        -->
+        <template v-if="chain.length">
+          <p class="kai-separator">{{ t('post_chained') }}</p>
+
+          <KaiList class="kai-list--flat kai-list--chain">
+            <KaiPostRow
+              v-for="member in chain"
+              :key="member.id"
+              :post="member"
+              :show-reply-reference="showsReplyReference(member)"
+              @select="push('post', { id: member.id })"
+            />
+          </KaiList>
+        </template>
 
         <p class="kai-separator">{{ t('post_replies') }}</p>
 
@@ -94,18 +131,23 @@
             {{ t('post_no_replies') }}
           </p>
 
-          <KaiList class="kai-list--flat">
+          <!--
+            The page flip controls lead the rows, as they do on the feed and the
+            inbox, so the highlight reaches them with UP from the first reply.
+          -->
+          <KaiPager v-if="repliesPages > 1" :page="repliesPage" :pages="repliesPages" @go="loadReplies" />
+
+          <KaiList class="kai-list--flat kai-list--replies">
             <KaiPostRow
               v-for="reply in replies"
               :key="reply.id"
               :post="reply"
+              :show-reply-reference="showsReplyReference(reply)"
               @select="push('post', { id: reply.id })"
             />
 
             <KaiListItem v-if="repliesStatus === 'error'" :primary="t('error_retry')" @select="retryReplies" />
           </KaiList>
-
-          <KaiPager :page="repliesPage" :pages="repliesPages" @go="loadReplies" />
         </template>
       </template>
     </main>
@@ -172,6 +214,28 @@ const repliesLoading = computed(() => repliesStatus.value === 'loading');
 const repliesPages = computed(() =>
   repliesTotal.value > 0 ? Math.ceil(repliesTotal.value / TAKE) : 1,
 );
+
+/** The post's continuation, oldest first: what the wire hydrated on the head. */
+const chain = computed(() => (post.value ? post.value.chainedPosts : []));
+
+/**
+ * Every post this screen draws on its own: the post, its chain and the replies
+ * on the current page. A reply whose parent is one of them has already said
+ * what the parent says — the parent is on the screen, usually directly above
+ * it — so the row leaves its quote out rather than printing it twice.
+ */
+const onScreen = computed(() => {
+  const ids: Record<string, boolean> = {};
+  if (post.value) ids[post.value.id] = true;
+  for (const member of chain.value) ids[member.id] = true;
+  for (const reply of replies.value) ids[reply.id] = true;
+  return ids;
+});
+
+function showsReplyReference(reply: Post): boolean {
+  const parent = reply.repliedTo;
+  return !parent || !onScreen.value[parent.id];
+}
 
 const isBodySelected = computed(() => uid.value !== 0 && nav.current === uid.value);
 const isExtrasSelected = computed(() => extrasUid.value !== 0 && nav.current === extrasUid.value);
@@ -240,18 +304,24 @@ const visibility = computed(() => (post.value ? visibilityKey(post.value.visibil
 
 const kind = computed(() => (post.value ? postKindKey(post.value.kind) : null));
 
-/** The post's reactions with a bundled sticker; the meta count only covers the rest. */
+/** The post's reactions with a bundled sticker; the counts line only covers the rest. */
 const chips = computed(() => (post.value ? reactionChips(post.value.reactions) : []));
 
-/** Total individual reactions, for the React row's summary line. */
-const reactionTotal = computed(() => {
-  if (!post.value) return 0;
-  const symbols = Object.keys(post.value.reactions);
-  let total = 0;
-  for (let index = 0; index < symbols.length; index += 1) {
-    total += post.value.reactions[symbols[index]];
+/**
+ * What the post drew, in the shape a feed row renders it: replies, boosts and
+ * the reactions with no bundled sticker (the ones the pills show are counted by
+ * the pills themselves, so counting them again would say it twice).
+ */
+const counts = computed(() => {
+  const list: Array<{ key: string; n: number }> = [];
+  const found = post.value;
+  if (!found) return list;
+  if (found.counts.replies) list.push({ key: 'post_count_replies', n: found.counts.replies });
+  if (found.counts.boosts) list.push({ key: 'post_count_boosts', n: found.counts.boosts });
+  if (found.counts.reactions && !chips.value.length) {
+    list.push({ key: 'post_count_reactions', n: found.counts.reactions });
   }
-  return total;
+  return list;
 });
 
 const accountStore = useAccountStore();

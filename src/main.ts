@@ -13,7 +13,8 @@ import { initSession } from './kaios/session.js';
 import { applyStatusBarInset } from './kaios/screen.js';
 
 installKeyHandler();
-// Before mount: the header's padding has to be right on the first paint.
+// Before mount: the header's padding has to be right on the first paint. The
+// inset keeps itself in step with the window after that — see `screen.ts`.
 applyStatusBarInset();
 
 // Pinia before anything reads a store, then the stored session restored into

@@ -10,8 +10,14 @@
     :aria-label="label"
     @click="emit('select')"
   >
-    <component :is="icon" class="kai-icon-button__icon" aria-hidden="true" />
-    <span v-if="showLabel" class="kai-icon-button__label">{{ label }}</span>
+    <!-- The layout lives on this span, not on the button: Gecko 48 (KaiOS 2.5)
+         cannot lay a `<button>` out as a flex container — that arrived in
+         Firefox 52 — so centring declared on the button itself is silently
+         ignored on device and the glyph sits on the text baseline instead. -->
+    <span class="kai-icon-button__inner">
+      <component :is="icon" class="kai-icon-button__icon" aria-hidden="true" />
+      <span v-if="showLabel" class="kai-icon-button__label">{{ label }}</span>
+    </span>
   </button>
 </template>
 

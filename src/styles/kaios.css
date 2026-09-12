@@ -156,32 +156,28 @@ body {
 /* --- Dashboard ------------------------------------------------------ */
 
 /*
- * The hero is the clock. The mark and time share one baseline (the reference
- * dashboard's clock-card reading), the date demotes to a quiet caption under
- * the line, and the countdown sits below a hairline with one accent dot
- * straddling it — the sun on the horizon. Above the line is now, below it is
- * next; that is the whole screen's structure.
+ * The hero is the clock. The time and the date share one line and one baseline
+ * — the date set to the clock's right as its caption — directly on the
+ * background. Everything else on the screen, the next event included, is a row
+ * of the list below; the clock is the only thing that is not.
  */
 .kai-hero {
   display: flex;
   flex-direction: column;
-  margin: 1.2rem 0 1.6rem;
+  /* The gap under the clock is what separates it from the first row's own
+     hairline, so it is the clock's whole lower margin. */
+  margin: 1.2rem 0 0.9rem;
 }
 
 .kai-hero__line {
   display: flex;
+  /* Baseline, not centre: the caption has to sit on the digits' foot, which is
+     what makes the two read as one line of type rather than two blocks. */
   align-items: baseline;
 }
 
-.kai-hero__mark {
-  width: auto;
-  height: 3.2rem;
-  /* The mark is a picture, not type: it should not move the baseline. */
-  align-self: center;
-}
-
 .kai-hero__time {
-  margin: 0 0 0 1.2rem;
+  margin: 0;
   font-size: var(--kai-fs-display);
   font-weight: var(--kai-fw-regular);
   /* Wide-set, light: the one display element in the app reads like an
@@ -190,34 +186,26 @@ body {
 }
 
 .kai-hero__date {
-  margin: 0.2rem 0 0;
+  margin: 0 0 0 0.9rem;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-thi);
   letter-spacing: 0.08em;
 }
 
-/* The dawn line: a hairline under the clock, with the countdown to the next
-   event hanging from it. The dot is the app's single decorative object — a
-   sun on the horizon, one accent mark, quiet. It sits on the rule by being
-   pulled up half its own height (`margin-top: -0.35rem` on an 0.8rem dot). */
-.kai-hero__countdown {
-  position: relative;
-  margin: 0.9rem 0 0;
-  padding: 0.5rem 0 0 1.4rem;
-  border-top: 0.1rem solid var(--kai-color-border);
-  color: var(--kai-color-text-muted);
+/* The next event is an ordinary tile — the same row as the screens under it —
+   with the countdown set beside its name in the accent the rest of the system
+   gives the one live measurement on a screen. */
+.kai-next-event__eta {
+  margin-left: 0.8rem;
+  color: var(--kai-color-accent);
   font-size: var(--kai-fs-p-sec);
+  font-weight: var(--kai-fw-semibold);
 }
 
-.kai-hero__dawn {
-  position: absolute;
-  top: 0;
-  left: 0.4rem;
-  width: 0.8rem;
-  height: 0.8rem;
-  margin-top: -0.35rem;
-  border-radius: 50%;
-  background: var(--kai-color-accent);
+/* On the selected row the tile is the accent fill, so the countdown takes the
+   row's own ink like every other part of it. */
+.kai-next-event[nav-selected="true"] .kai-next-event__eta {
+  color: var(--kai-color-on-accent);
 }
 
 /* A list whose rows are flat: no leading gap, so the first divider sits under the
@@ -226,17 +214,192 @@ body {
   margin: 0;
 }
 
+/* --- Calendar ------------------------------------------------------- */
+
+/* The month bar: previous, the month, next — the pager's row, reused, so the
+   arrows are ordinary selectable cells and the label between them is inert. */
+.kai-cal__bar {
+  display: flex;
+  align-items: stretch;
+  margin: 0.6rem calc(-1 * var(--kai-gutter)) 0;
+}
+
+.kai-cal__bar .kai-list-item {
+  flex: 0 0 auto;
+  width: 4rem;
+  min-height: 3.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.kai-cal__bar .kai-list-item__icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  margin: auto;
+}
+
+.kai-cal__bar .kai-list-item[nav-selected="true"] {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-cal__month {
+  flex: 1;
+  margin: 0;
+  color: var(--kai-color-text);
+  font-size: var(--kai-fs-h4);
+  font-weight: var(--kai-fw-semibold);
+  letter-spacing: 0.06em;
+  text-align: center;
+  align-self: center;
+}
+
+/* The weekday header: one cell per column, the same widths the grid uses, so
+   the labels sit over the days they name. */
+.kai-cal__weekdays {
+  display: flex;
+  margin: 0 0 0.2rem;
+}
+
+.kai-cal__weekday {
+  flex: 0 0 14.2857%;
+  max-width: 14.2857%;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+  line-height: 1.4rem;
+  text-align: center;
+}
+
+/* The grid is one selectable: the D-pad moves a cursor inside it rather than
+   hopping between forty-two rows. It carries the same ring the chat bubbles use
+   when highlighted, since a fill would hide the day cells.
+
+   Six weeks at 3.4rem is 20.4rem — the grid, the two header rows and a first
+   agenda row are what a 240x320 screen has room for. */
+.kai-cal__grid {
+  padding: 0.2rem 0;
+}
+
+.kai-cal__grid[nav-selected="true"] {
+  outline: 0.2rem solid var(--kai-color-accent);
+}
+
+.kai-cal__week {
+  display: flex;
+}
+
+.kai-cal__day {
+  position: relative;
+  flex: 0 0 14.2857%;
+  max-width: 14.2857%;
+  height: 3.4rem;
+  padding: 0.1rem 0 0.6rem;
+  border: 0.1rem solid transparent;
+  border-radius: var(--kai-radius);
+  text-align: center;
+}
+
+/* A day outside the month it is drawn for: present, for the week to read
+   correctly, but quiet. */
+.kai-cal__day--outside {
+  color: var(--kai-color-text-muted);
+}
+
+/* Today is a hairline box; the cursor is the solid accent. Both can be true, so
+   the cursor's fill comes last and wins. */
+.kai-cal__day--today {
+  border-color: var(--kai-color-accent);
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-cal__day--cursor {
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-cal__num {
+  font-size: var(--kai-fs-p-sec);
+  line-height: 1.7rem;
+}
+
+/* The marks sit under the number, centred: one dot per kind of thing the day
+   carries. No flex `gap` on Gecko 48 — the dots space themselves. */
+.kai-cal__marks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 0.6rem;
+}
+
+.kai-cal__mark {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 0.1rem;
+  border-radius: 50%;
+  background: var(--kai-color-accent);
+}
+
+/* A notable day is the network's own, not the account's: a hollow dot reads as
+   a different kind of thing at this size. */
+.kai-cal__mark--notable {
+  background: transparent;
+  border: 0.1rem solid var(--kai-color-text-muted);
+}
+
+/* The cursor's own day inverts, so its marks need the light colour too. */
+.kai-cal__day--cursor .kai-cal__mark {
+  background: var(--kai-color-on-accent);
+}
+
+.kai-cal__day--cursor .kai-cal__mark--notable {
+  background: transparent;
+  border-color: var(--kai-color-on-accent);
+}
+
+/* The agenda's rows reuse the list row; the time is the row's second line. */
+.kai-cal__when {
+  display: block;
+}
+
+.kai-cal__desc {
+  display: block;
+  margin-top: 0.2rem;
+  white-space: normal;
+}
+
+/* Notable days are a name, not a control: a plain row under the agenda, with
+   the same dot the grid draws for them. */
+.kai-cal__notable-list {
+  margin: 0;
+}
+
+.kai-cal__notable {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0 var(--kai-gutter);
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
 /* --- Header --------------------------------------------------------- */
 
 .kai-header {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  /* The system status bar is drawn over the app on some KaiOS builds; the
-     header grows by that inset so the title clears the bar while its accent
-     background runs underneath it. `--kai-safe-top` is 0 wherever there is no
-     status bar over the app — see src/kaios/screen.js. `min-height` rather than
-     `height` is what lets it grow. */
+  /* The inset is only ever non-zero on a handset whose window covers the whole
+     panel: the system bar is then drawn over the app, so the header grows by it
+     and the title clears the bar while its accent background runs underneath.
+     Everywhere else it is 0 and this is the plain 36px header — see
+     src/kaios/screen.ts. `min-height` rather than `height` is what lets it
+     grow. */
   padding: var(--kai-safe-top, 0px) var(--kai-gutter) 0;
   min-height: calc(var(--kai-safe-top, 0px) + var(--kai-header-height));
   background: var(--kai-color-accent);
@@ -362,6 +525,24 @@ body {
   display: block;
   border-radius: 50%;
   object-fit: cover;
+}
+
+/* No picture, a name to letter: a filled circle with its initials. Both
+   reference clients do this, and it is what keeps a list's left edge straight
+   — a row whose avatar is missing would otherwise start its text at the
+   screen edge. One accent fill, not a palette: the design system allows a
+   single warm note (`--kai-color-error`) and gives every other colour a
+   meaning, so colour stays a signal rather than decoration. */
+.kai-avatar--letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+  font-size: var(--kai-fs-p-thi);
+  font-weight: var(--kai-fw-semibold);
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .kai-avatar--xs {
@@ -516,8 +697,8 @@ body {
 
 /* A dark viewer for a post's attachments: the first picture is the post, and
    Enter here shows it whole — with zoom and pan for images, playback for
-   videos, and LEFT/RIGHT to move through the set. The stage is the selected
-   element; the counter sits pinned under it. */
+   videos, and LEFT/RIGHT to move through the set. The media is the screen: the
+   stage takes every pixel, and the set's counter rides over it. */
 .kai-lightbox {
   display: flex;
   flex-direction: column;
@@ -527,6 +708,8 @@ body {
 }
 
 .kai-lightbox__stage {
+  /* The counter is positioned against the media, not against the view. */
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -547,36 +730,51 @@ body {
   max-height: none;
 }
 
+/* A document's or a voice note's line, centred in the stage: the screen's only
+   text, so no default paragraph margins may push it off centre. */
 .kai-lightbox__line {
+  margin: 0;
   color: #d0d3d9;
   padding: var(--kai-gutter);
   text-align: center;
 }
 
+/*
+ * Over the media, in its bottom corner: the position in the set is a fact about
+ * the picture, so it does not take a row of the screen from it. The wash is dark
+ * enough for white 12px text over any picture (0.72 over white is ~7:1); the
+ * progress bar owns the very bottom edge, so the chip sits above it.
+ */
 .kai-lightbox__counter {
-  flex: 0 0 auto;
-  padding: 0.6rem 0;
-  text-align: center;
-  font-size: var(--kai-fs-p-sec);
-}
-
-.kai-lightbox__hint {
-  flex: 0 0 auto;
-  padding: 0 0 0.6rem;
-  text-align: center;
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.8rem;
+  margin: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--kai-radius);
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
   font-size: var(--kai-fs-p-thi);
-  color: #d0d3d9;
 }
 
-/* The video fills the stage; the paused badge and the progress bar sit on
-   top of it. */
-.kai-lightbox__video {
+/* The media fills the stage; the paused badge and the progress bar sit on
+   top of it. One box for both media kinds — a video draws in it, audio shows
+   its own line there with the badge over it. */
+.kai-lightbox__stage-box {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   height: 100%;
+}
+
+/* An `<audio>` element renders its own controls, which this app never wants:
+   playback is the centre key and the badge. The element stays in the box to
+   own the stream, with no box of its own. */
+.kai-lightbox__audio {
+  width: 0;
+  height: 0;
 }
 
 .kai-lightbox__play {
@@ -739,6 +937,14 @@ body {
   font-size: var(--kai-fs-p-sec);
 }
 
+/* A take in progress: the app's one live state, so it takes the accent the
+   rest of the system reserves for what the user is doing right now. */
+.kai-text--recording {
+  color: var(--kai-color-accent);
+  font-size: var(--kai-fs-p-sec);
+  font-weight: var(--kai-fw-semibold);
+}
+
 /* Separator: introduces a subsection of content (design-guide/ui-component). */
 .kai-separator {
   margin: 1.4rem 0 0.4rem;
@@ -763,17 +969,42 @@ body {
 }
 
 /*
- * The detail body is a card — surface, shadow, square corners — while the feed
- * rows stay hairlines. It is pulled out over the content gutter so its edges
- * snap to the screen edges: the shadow spills only at the top and bottom, and
- * the corners are square because the screen edge is the frame.
+ * The detail screen's post — the non-attachment section. Not a card: its
+ * picture already runs to the screen edges above it, so a surface and a shadow
+ * would draw a seam where the two meet, and every other screen in the app reads
+ * as rows on the page. One column instead: who wrote it, what it says, what
+ * came of it. No horizontal padding of its own — the content region already
+ * carries the gutter, and the column has to line up with the feed rows and the
+ * lines under the pictures (the strip cancels the gutter, this does not).
  */
-.kai-content > div.kai-post {
-  margin: 0 calc(-1 * var(--kai-gutter));
-  background-color: var(--kai-color-surface);
-  /* A quiet shadow: the card is a step up from the page, not a drop. */
-  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.14);
-  border-radius: 0;
+.kai-post--detail {
+  padding: 1.2rem 0 0.8rem;
+}
+
+/* The masthead's avatar is the biggest thing in the column; the facts of
+   publication hang under it, muted, at the meta size. */
+.kai-post--detail .kai-post__author {
+  margin-bottom: 0.2rem;
+}
+
+/*
+ * An article's title is the one headline the app has room for, so it takes the
+ * display size the clock uses. Fenced to the detail: a feed row keeps its title
+ * at H1, where a headline that size would out-shout the row's own excerpt.
+ */
+.kai-post--detail .kai-post__title {
+  margin: 0.8rem 0 0.6rem;
+  font-size: var(--kai-fs-display);
+  line-height: 1.25;
+}
+
+/* The last paragraph's own margin is the air above the counts line. */
+.kai-post--detail .kai-md {
+  margin-bottom: 0;
+}
+
+.kai-post--detail .kai-post__counts {
+  margin-top: 0.4rem;
 }
 
 /*
@@ -784,6 +1015,7 @@ body {
  * full-bleed highlight is the KaiOS sample app's own list look.
  */
 li.kai-post,
+li.kai-notification,
 .kai-list--flat .kai-list-item {
   margin: 0 calc(-1 * var(--kai-gutter));
   border-top: 0.1rem solid var(--kai-color-border);
@@ -792,6 +1024,7 @@ li.kai-post,
 }
 
 li.kai-post:not([nav-selected="true"]),
+li.kai-notification:not([nav-selected="true"]),
 .kai-list--flat .kai-list-item:not([nav-selected="true"]) {
   background: transparent;
 }
@@ -810,7 +1043,8 @@ li.kai-post:not([nav-selected="true"]),
   border-top: 0;
 }
 
-li.kai-post[nav-selected="true"] {
+li.kai-post[nav-selected="true"],
+li.kai-notification[nav-selected="true"] {
   background: var(--kai-color-accent);
   color: var(--kai-color-on-accent);
 }
@@ -921,18 +1155,41 @@ li.kai-post[nav-selected="true"] .kai-post__handle {
 }
 
 /*
+ * The `[image]` tag is the accent on a light surface, so every surface that
+ * inverts its own text has to carry the tag with it — the tag does not inherit.
+ * Miss one and the marker lands accent-on-accent (invisible) or on black
+ * (unreadable), which is invisible in review because each surface looks fine on
+ * its own. This list is the whole contract; a new inverted surface belongs here.
+ */
+li.kai-post[nav-selected="true"] .kai-post__attach-kind,
+.kai-list-item[nav-selected="true"] .kai-post__attach-kind,
+.kai-chat-bubble--own .kai-post__attach-kind,
+.kai-lightbox .kai-post__attach-kind {
+  color: var(--kai-color-on-accent);
+}
+
+/*
  * The detail screen's attachments live above the post body, flush against it:
  * the picture is the post, the text is what it says.
  */
 .kai-post-extras {
-  /* Pulled out over the content gutter, so the attachments run to the screen
-     edges like the card they sit on. */
+  /* Pulled out over the content gutter, so the pictures run to the screen
+     edges — and so does the post body's own column, which is not a card. */
   margin: 0 calc(-1 * var(--kai-gutter));
 }
 
 /* Edge-snapped pictures square their corners: the screen edge is the frame. */
 .kai-post-extras .kai-attachment__image {
   border-radius: 0;
+}
+
+/*
+ * The lines under the pictures are text, not pictures: they take back the gutter
+ * the strip gave up. Without this the `+n more` count starts at x=0 while every
+ * other line on the screen starts at the gutter.
+ */
+.kai-post-extras .kai-post__attach {
+  padding: 0 var(--kai-gutter);
 }
 
 /*
@@ -1047,12 +1304,12 @@ li.kai-post .kai-attachment__image {
 }
 
 /* A selected row inverts to the accent background: every muted child has to come
-   with it or it turns into accent-on-accent. */
+   with it or it turns into accent-on-accent. (`.kai-post__attach` and the
+   `[image]` tag inside it are the marker contract, listed with it above.) */
 li.kai-post[nav-selected="true"] .kai-post__quote-label,
 li.kai-post[nav-selected="true"] .kai-post__quote-text,
 li.kai-post[nav-selected="true"] .kai-post__quote-attach,
 li.kai-post[nav-selected="true"] .kai-post__attach,
-li.kai-post[nav-selected="true"] .kai-post__attach-kind,
 li.kai-post[nav-selected="true"] .kai-post__counts {
   color: var(--kai-color-on-accent);
 }
@@ -1438,12 +1695,14 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   margin-top: 0.6rem;
 }
 
+/* One tool in a media toolbar: an icon over an optional label, centred. The
+   centring lives on the inner span because Gecko 48 refuses to lay a `<button>`
+   out as a flex container (Firefox 52, bug 984869) — declared here it would be
+   dropped on device and the glyph would sit top-left on the text baseline.
+   The button itself needs only block display, which Gecko 48 does honour. */
 .kai-icon-button {
   flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: block;
   height: 5rem;
   margin: 0 0.2rem;
   padding: 0;
@@ -1452,6 +1711,14 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   background: transparent;
   color: var(--kai-color-text-muted);
   font-family: var(--kai-font-family);
+}
+
+.kai-icon-button__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 /* An icon-only row (labels hidden) is just the tap target around the glyph. */
@@ -1473,4 +1740,305 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 .kai-icon-button__label {
   margin-top: 0.3rem;
   font-size: var(--kai-fs-p-thi);
+}
+
+/* --- Chat ------------------------------------------------------------ */
+
+/* The thread: a plain list of bubbles, no cards, no dividers — the messages
+   are the content. The list is the scrollFirst selectable region, so it owns
+   the D-pad until scrolled to its end, exactly like the post body. It is a
+   flex column because that is what puts your own messages on the right: the
+   bubble's `align-self` only means something inside one. */
+.kai-chat {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: var(--kai-gutter) 0;
+  padding: 0;
+}
+
+/* One message. Others' bubbles sit on the left with the sender above; your own
+   sit on the right with the accent background — the two-sided conversation
+   shape the design guide's messaging pattern describes. */
+.kai-chat-bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  margin: 0 0 0.8rem;
+  /* The ring is the bubble's own border, so it follows the bubble's radius: an
+     `outline` on Gecko 48 is a rectangle, which drew a box over the rounded
+     bubble. It is always there and always transparent, so selecting one cannot
+     resize the message, and the padding gives back exactly what the border
+     takes — the text sits where it did before there was a border at all. */
+  border: 0.2rem solid transparent;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--kai-radius);
+  background: var(--kai-color-surface);
+  box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.14);
+}
+
+.kai-chat-bubble--own {
+  align-self: flex-end;
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+/* A bubble's background already says who sent it, so the highlight is a ring
+   rather than a fill — and it has to read on both the surface and the accent.
+   On the accent bubble the ring turns white, and it rides the accent edge
+   rather than floating past it onto the page. */
+.kai-chat-bubble[nav-selected="true"] {
+  border-color: var(--kai-color-accent);
+}
+
+.kai-chat-bubble--own[nav-selected="true"] {
+  border-color: var(--kai-color-on-accent);
+}
+
+/* The sender line: avatar then name. Your own bubble reverses it, so the
+   avatar faces the screen edge and the text stays beside the body. */
+.kai-chat-bubble__head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.kai-chat-bubble--own .kai-chat-bubble__head {
+  flex-direction: row-reverse;
+}
+
+.kai-chat-bubble__avatar {
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.kai-chat-bubble--own .kai-chat-bubble__avatar {
+  margin-right: 0;
+  margin-left: 0.5rem;
+}
+
+.kai-chat-bubble__sender {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+  font-weight: var(--kai-fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kai-chat-bubble--own .kai-chat-bubble__sender {
+  color: var(--kai-color-on-accent);
+}
+
+/* A reply's reference: the sender and a one-line excerpt of the original,
+   packed like the quote a post row shows but slimmer — this sits inside a
+   bubble. The sender is the excerpt's own voice, so it is bolder than the
+   excerpt and muted like the sender line above. */
+.kai-chat-bubble__quote {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0 0 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-left: 0.2rem solid var(--kai-color-text-muted);
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-chat-bubble--own .kai-chat-bubble__quote {
+  border-left-color: var(--kai-color-on-accent);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-chat-bubble__quote-sender {
+  font-weight: var(--kai-fw-semibold);
+}
+
+.kai-chat-bubble__quote-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The reactions a message drew; the pills keep their own colours, so the row
+   needs nothing but a little air between it and the meta line. */
+.kai-chat-bubble .kai-reactions {
+  margin-top: 0.4rem;
+}
+
+.kai-chat-bubble__content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A sticker is the message: it sits at its natural size (a thumb preset, so a
+   few KB), capped so an outsized one cannot fill the thread. No bubble
+   padding around a transparent PNG, which is why the media row above it is
+   the only thing that gives the bubble its width here. */
+.kai-chat-bubble__sticker {
+  display: block;
+  width: 12rem;
+  max-width: 100%;
+  border-radius: var(--kai-radius);
+}
+
+/* An attachment sits inside the bubble, so it is capped by the bubble rather
+   than by the screen: a portrait photo would otherwise be a column twice the
+   thread's width. Same treatment as a feed row's picture. */
+.kai-chat-bubble .kai-attachment__image {
+  max-height: 14rem;
+  object-fit: cover;
+  border-radius: 0.4rem;
+}
+
+.kai-chat-bubble .kai-post__attach {
+  margin-top: 0.4rem;
+}
+
+/* The accent bubble carries its own text colour, and the attachment line would
+   otherwise stay muted-on-accent. (The `[image]` tag that sits on it is part of
+   the marker contract above, where every inverted surface is listed.) */
+.kai-chat-bubble--own .kai-post__attach {
+  color: var(--kai-color-on-accent);
+}
+
+.kai-chat-bubble__meta {
+  display: flex;
+  margin-top: 0.3rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-chat-bubble--own .kai-chat-bubble__meta {
+  color: var(--kai-color-on-accent);
+}
+
+.kai-chat-bubble__time {
+  margin-right: 0.6rem;
+}
+
+/* The unread count on a room row: a red capsule, the shape both other clients
+   give it (the watch's red capsule beside the title, Flutter's red badge over
+   the avatar). It keeps its own colours because the row's secondary text goes
+   white on the accent when the row is highlighted, which a filled pill must
+   not follow. White on `--kai-color-error` is 6.5:1. */
+.kai-chat-row__unread {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  background: var(--kai-color-error);
+  color: var(--kai-color-on-accent);
+  font-size: var(--kai-fs-p-thi);
+  font-weight: var(--kai-fw-semibold);
+  white-space: nowrap;
+}
+
+/* The preview is one line, ellipsised: a room row shows what was last said,
+   not a paragraph of it. The pill sits outside the clip, so the count is never
+   the thing that is cut off. (No flex `gap`: that is Firefox 63+.) */
+.kai-chat-room .kai-list-item__secondary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.kai-chat-row__preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kai-chat-bubble__edited {
+  margin-left: 0.6rem;
+}
+
+/* --- Notifications ----------------------------------------------------- */
+
+/*
+ * One notification: the actor's face — or the glyph its topic names — on the
+ * left, the title over the time over the body beside it, and the unread dot at
+ * the far edge. The row's own frame is the flat-row rule up in the post
+ * section; only the inside lives here.
+ */
+.kai-notification {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.8rem var(--kai-gutter);
+}
+
+.kai-notification__lead {
+  flex-shrink: 0;
+  margin-right: 0.8rem;
+}
+
+/* The topic glyph in the same circle the lettered fallback avatar draws, so a
+   notification the server sent no picture for keeps the list's left edge. */
+.kai-notification__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: var(--kai-color-accent);
+  color: var(--kai-color-on-accent);
+}
+
+.kai-notification__glyph svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.kai-notification__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kai-notification__title {
+  font-size: var(--kai-fs-p-pri);
+}
+
+.kai-notification__time {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-thi);
+}
+
+.kai-notification__detail {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* The muted lines go white with the rest of the row's text when it is
+   highlighted (the flat-row rule inverts the background). */
+.kai-notification[nav-selected="true"] .kai-notification__time,
+.kai-notification[nav-selected="true"] .kai-notification__detail {
+  color: var(--kai-color-on-accent);
+}
+
+/* The unread dot: the accent, because the palette's one warm note — the error
+   red — is the chat list's unread *count*, and a mark is not a number. It is
+   its own element rather than a fill, since the highlight owns the row's
+   background: on a highlighted row the dot inverts with the text. */
+.kai-notification__unread {
+  flex-shrink: 0;
+  align-self: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-left: 0.6rem;
+  border-radius: 50%;
+  background: var(--kai-color-accent);
+}
+
+.kai-notification[nav-selected="true"] .kai-notification__unread {
+  background: var(--kai-color-on-accent);
 }

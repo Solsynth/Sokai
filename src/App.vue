@@ -14,10 +14,19 @@ import { setBackHandler } from '~/src/kaios/keys.js';
 import { canGoBack, currentView, pop, stack } from '~/src/kaios/views.js';
 import AboutView from '~/src/views/AboutView.vue';
 import AccountView from '~/src/views/AccountView.vue';
+import CalendarView from '~/src/views/CalendarView.vue';
+import ChatComposeView from '~/src/views/ChatComposeView.vue';
+import ChatInvitesView from '~/src/views/ChatInvitesView.vue';
+import ChatNewView from '~/src/views/ChatNewView.vue';
+import ChatRoomView from '~/src/views/ChatRoomView.vue';
+import ChatSearchView from '~/src/views/ChatSearchView.vue';
+import ChatStickersView from '~/src/views/ChatStickersView.vue';
+import ChatView from '~/src/views/ChatView.vue';
 import ComposeView from '~/src/views/ComposeView.vue';
 import DashboardView from '~/src/views/DashboardView.vue';
 import ExploreView from '~/src/views/ExploreView.vue';
 import LightboxView from '~/src/views/LightboxView.vue';
+import NotificationsView from '~/src/views/NotificationsView.vue';
 import PostView from '~/src/views/PostView.vue';
 import PublisherView from '~/src/views/PublisherView.vue';
 import ReactionsView from '~/src/views/ReactionsView.vue';
@@ -25,13 +34,22 @@ import SearchView from '~/src/views/SearchView.vue';
 
 const VIEWS: Record<string, Component> = {
   dashboard: DashboardView,
+  calendar: CalendarView,
   explore: ExploreView,
   compose: ComposeView,
   publishers: PublisherView,
   search: SearchView,
   post: PostView,
   reactions: ReactionsView,
+  notifications: NotificationsView,
   lightbox: LightboxView,
+  chat: ChatView,
+  'chat-room': ChatRoomView,
+  'chat-compose': ChatComposeView,
+  'chat-new': ChatNewView,
+  'chat-invites': ChatInvitesView,
+  'chat-search': ChatSearchView,
+  'chat-stickers': ChatStickersView,
   account: AccountView,
   about: AboutView,
 };

@@ -66,11 +66,27 @@
               :show-label="false"
               @select="addMedia(recordVideo)"
             />
+            <!-- The platform recorder and dictation share one microphone, and
+                 the recorder is a whole app switch: only the tool that can run
+                 is drawn — dictation where the device has the speech service,
+                 the recorder where it does not. -->
             <KaiIconButton
+              v-if="!dictating && !dictationSupported"
               :icon="Mic"
               :label="t('compose_record_audio')"
               :show-label="false"
               @select="addMedia(recordAudio)"
+            />
+            <!-- Dictation is the platform's speech service, not a take: each
+                 settled phrase is appended to the body as text. The tool is
+                 only drawn where the device has the API (KaiOS adds it on top
+                 of Gecko 48, so it is not everywhere). -->
+            <KaiIconButton
+              v-if="dictationSupported"
+              :icon="dictating ? Square : Speech"
+              :label="dictating ? t('compose_dictate_stop') : t('compose_dictate')"
+              :show-label="false"
+              @select="toggleDictation"
             />
             <KaiIconButton
               :icon="Images"
@@ -79,6 +95,14 @@
               @select="addMedia(pickImage)"
             />
           </div>
+
+          <!-- While the platform listens, the phrase in flight is the feedback
+               — the text itself lands only once the phrase is settled. The
+               failure line sits here too: it is about the tool above it. -->
+          <p v-if="dictating" class="kai-text kai-text--recording">
+            {{ dictationPhrase ? t('compose_dictating', { text: dictationPhrase }) : t('dictation_listening') }}
+          </p>
+          <p v-if="dictationError" class="kai-text kai-text--error">{{ t(dictationError) }}</p>
 
           <KaiList class="kai-list--flat">
             <KaiComposeAttachment
@@ -99,7 +123,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Camera, Images, Mic, Video } from '@lucide/vue';
+import { Camera, Images, Mic, Speech, Square, Video } from '@lucide/vue';
 import { type AttachmentKind, type PostReference } from '~/src/api/models.js';
 import { createPost, updatePost, uploadFile } from '~/src/api/solian.js';
 import KaiComposeAttachment from '~/src/components/KaiComposeAttachment.vue';
@@ -111,6 +135,7 @@ import KaiPostQuote from '~/src/components/KaiPostQuote.vue';
 import KaiSpinner from '~/src/components/KaiSpinner.vue';
 import KaiTextArea from '~/src/components/KaiTextArea.vue';
 import { pickImage, recordAudio, recordVideo, takePhoto, type PickedMedia } from '~/src/kaios/activity.js';
+import { useDictation } from '~/src/kaios/dictation.js';
 import { t } from '~/src/kaios/l10n.js';
 import { setBaseSoftkeys } from '~/src/kaios/nav.js';
 import { pop, push } from '~/src/kaios/views.js';
@@ -141,6 +166,25 @@ const isForward = computed(() => mode.value === 'forward');
 
 const hasBody = computed(() => store.content.trim().length > 0 || store.attachments.length > 0);
 const formReady = computed(() => signedIn.value && (isEdit.value || publisherStatus.value === 'ready'));
+
+/**
+ * Dictation writes into the shared draft: a settled phrase is appended to
+ * whatever the body holds at that moment, so it can never swallow typing that
+ * happened while the microphone was open.
+ */
+const {
+  supported: dictationSupported,
+  listening: dictating,
+  interim: dictationPhrase,
+  errorKey: dictationError,
+  toggle: toggleDictation,
+  stop: stopDictation,
+} = useDictation({
+  read: () => store.content,
+  write: (value) => {
+    store.content = value;
+  },
+});
 
 const headerTitle = computed(() => {
   if (isEdit.value) return t('compose_edit');
@@ -292,6 +336,9 @@ async function submit(): Promise<void> {
 // so a stray press is a no-op either way. Reading the store inside the factory
 // keeps the label current as the draft is typed and photos are attached.
 const rightKey = computed(() => {
+  // A live session owns the right key: the microphone must always be one press
+  // away from being released, even before a single phrase has landed.
+  if (dictating.value) return { label: t('dictation_stop'), onPress: stopDictation };
   if (!formReady.value || submitting.value || !hasBody.value) {
     return { label: '', onPress: null };
   }

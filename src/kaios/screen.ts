@@ -1,18 +1,18 @@
 /**
  * The system status bar.
  *
- * `manifest.webapp` does not request `fullscreen`, so KaiOS shows its 26px
- * status bar above the app. The app reserves that space by default — the header
- * carries it as top padding, so its background runs under the bar — because
- * that is the safe side of the one thing the platform does not tell us: whether
- * the bar is drawn *over* the app or the space is *reserved* for it. Reserving
- * twice costs a strip of empty title bar; not reserving loses the title.
+ * `manifest.webapp` does not request `fullscreen`, and the bar is drawn *over*
+ * the app only when it forces that (`chrome.statusbar: "overlap"`). By default
+ * the platform sizes the app's window to sit below the 26px bar, so the app's
+ * top edge already clears it and any space the app reserves there is a band of
+ * empty header — at 26px more than half again the header's own 36px, which is
+ * what makes the bar read as twice its height.
  *
- * The single case that is detectable is the platform having reserved it already,
- * and only on a handset: the panel matches the viewport's width and is a bar
- * taller than it is. `screen` on anything else is a monitor, so a desktop
- * browser, the dev server and the gates all get the reserved space too — which
- * keeps what you see off-device the same layout as on it.
+ * The one case that needs the inset is a handset whose viewport covers the
+ * whole panel: the bar then sits on top of the header, and the header has to
+ * grow so the title clears it. Nothing else has a system bar over the page at
+ * all — `screen` is a monitor in a desktop browser, the simulator, the dev
+ * server and the gates — so nothing else gets an inset.
  */
 
 export const STATUS_BAR_PX = 26;
@@ -31,10 +31,13 @@ export interface ScreenMetrics {
 export function statusBarInset(metrics: ScreenMetrics): number {
   const onHandset =
     Math.abs(metrics.screenWidth - metrics.innerWidth) <= 1 && metrics.screenWidth <= PANEL_MAX_PX;
-  if (!onHandset) return STATUS_BAR_PX;
 
-  // On a handset a viewport shorter than the panel means the platform already
-  // reserved the bar's space, and reserving it again would double the gap.
+  // A monitor has no system bar over the page — the platform draws and paints
+  // it (`theme-color`) outside the window — so there is nothing to clear.
+  if (!onHandset) return 0;
+
+  // A viewport a bar shorter than the panel is a window the platform has put
+  // *below* the bar already; reserving the space again doubles the gap.
   if (metrics.screenHeight - metrics.innerHeight >= STATUS_BAR_PX) return 0;
 
   return STATUS_BAR_PX;
@@ -56,17 +59,27 @@ export function isMonitor(): boolean {
 
 /**
  * Publishes the inset as `--kai-safe-top` on the document element; the header
- * consumes it. Called once at startup, before mount.
+ * consumes it. Called once at startup, before mount, so the first paint is
+ * right — and again on every resize, because the window the app is given can
+ * settle *after* that first paint (the platform laying out its own chrome), and
+ * a stale inset is exactly the band of empty header the measurement exists to
+ * avoid.
  */
 export function applyStatusBarInset(): number {
-  const screen = window.screen || {};
-  const inset = statusBarInset({
-    screenWidth: screen.width || 0,
-    screenHeight: screen.height || 0,
-    innerWidth: window.innerWidth || 0,
-    innerHeight: window.innerHeight || 0,
-  });
+  const publish = (): number => {
+    const screen = window.screen || {};
+    const inset = statusBarInset({
+      screenWidth: screen.width || 0,
+      screenHeight: screen.height || 0,
+      innerWidth: window.innerWidth || 0,
+      innerHeight: window.innerHeight || 0,
+    });
 
-  document.documentElement.style.setProperty('--kai-safe-top', inset + 'px');
-  return inset;
+    document.documentElement.style.setProperty('--kai-safe-top', inset + 'px');
+    return inset;
+  };
+
+  window.addEventListener('resize', publish);
+
+  return publish();
 }

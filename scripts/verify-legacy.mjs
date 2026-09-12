@@ -197,6 +197,66 @@ for (const file of cssFiles) {
   }
 }
 
+/*
+ * A `<button>` cannot be a flex container on Gecko 48: `display: flex/grid`
+ * inside a button arrived in Firefox 52 (bug 984869). Gecko 48 does not reject
+ * the declaration — it lays the button out its own way, so `align-items` and
+ * `justify-content` are simply dropped and the contents end up on the text
+ * baseline. That is invisible in the dev browser and wrong on the handset,
+ * which is exactly the class of bug this gate exists for.
+ *
+ * The check reads the classes the templates actually put on `<button>`
+ * elements, then looks for a rule that reaches one of them with a flex/grid
+ * display. A button styled through a class the templates never use cannot be
+ * caught statically, so this covers the real usages rather than the syntax.
+ */
+function buttonClasses() {
+  const names = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const full = path.join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!full.endsWith('.vue') && !full.endsWith('.html')) continue;
+      const source = readFileSync(full, 'utf8');
+      const tags = source.match(/<button\b[^>]*>/g) || [];
+      for (const tag of tags) {
+        const attr = /class\s*=\s*"([^"]*)"/.exec(tag);
+        if (!attr) continue;
+        for (const name of attr[1].split(/\s+/)) {
+          if (name) names.add(name);
+        }
+      }
+    }
+  };
+  if (existsSync('src')) walk('src');
+  return names;
+}
+
+const FLEX_DISPLAY = /display\s*:\s*(inline-)?(flex|grid)\b/;
+const buttonOnly = buttonClasses();
+
+for (const name of buttonOnly) {
+  // `--` variants are separate classes: `.kai-icon-button--icon-only` must not
+  // be read as a rule for `.kai-icon-button`.
+  const selector = new RegExp('\\.' + name.replace(/[-]/g, '\\-') + '(?![\\w-])[^{}]*\\{([^}]*)\\}', 'g');
+  for (const file of cssFiles) {
+    const css = readFileSync(file, 'utf8');
+    let match = selector.exec(css);
+    while (match) {
+      if (FLEX_DISPLAY.test(match[1])) {
+        fail(
+          'css',
+          `${relative(file)} — "button.${name}" is given a flex/grid display; Gecko 48 ignores it (Firefox 52, bug 984869) and drops the centring it carries. Put the layout on an inner element instead`,
+        );
+      }
+      match = selector.exec(css);
+    }
+  }
+}
+
 /* --- Manifest ------------------------------------------------------------ */
 
 const manifestFile = path.join(DIST, 'manifest.webapp');
@@ -242,6 +302,32 @@ if (!existsSync(manifestFile)) {
     }
     if (!manifest.permissions || !manifest.permissions.systemXHR) {
       note('manifest', 'systemXHR is not requested; privileged XHR will fall back to CORS');
+    }
+
+    /*
+     * A privilege the code needs but the manifest does not request is a feature
+     * that silently degrades on device: the platform-facing APIs below exist on
+     * KaiOS 2.5 only for an app that asks, and a refusal surfaces as an error
+     * line rather than a crash — so nothing else here would notice. The API's
+     * name is read out of the built bundle and held against the manifest; a
+     * name that minification dropped simply skips the check.
+     */
+    const BUNDLE = path.join(DIST, 'js', 'app.js');
+    if (existsSync(BUNDLE)) {
+      const code = readFileSync(BUNDLE, 'utf8');
+      const REQUIRED = [
+        ['webkitSpeechRecognition', 'speech-recognition', 'dictation'],
+        ['mozGetUserMedia', 'audio-capture', 'in-app recording'],
+      ];
+      for (const [api, privilege, feature] of REQUIRED) {
+        if (code.indexOf(api) === -1) continue;
+        if (!manifest.permissions || !manifest.permissions[privilege]) {
+          fail(
+            'manifest',
+            `the bundle uses ${api} (${feature}) but manifest.webapp does not request the "${privilege}" privilege`,
+          );
+        }
+      }
     }
   }
 }

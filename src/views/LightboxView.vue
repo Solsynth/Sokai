@@ -1,11 +1,12 @@
 <template>
-  <!-- No title bar: the lightbox is full-bleed, and the counter under the
-       media says which attachment is showing. -->
+  <!-- No title bar: the lightbox is full-bleed, and the counter over the media
+       says which attachment of the set is showing. -->
   <div class="kai-view">
     <!-- The media area is the view: LEFT/RIGHT move through the post's
          attachments (wrapping), UP/DOWN zoom an image, the centre key plays a
          video, and a zoomed image pans under LEFT/RIGHT and the 2/4/6/8 pad.
-         The counter and a key hint sit pinned under the stage. -->
+         Nothing else is drawn — no title bar, no key hint: the media takes the
+         whole screen, and a set of more than one carries its count over it. -->
     <main ref="stage" class="kai-content kai-lightbox">
       <div
         tabindex="-1"
@@ -30,12 +31,12 @@
              server's thumbnail as the poster until the first play. While
              paused the play badge sits on it; a progress bar tracks playback
              under it. The centre key (or a tap) toggles play. -->
-        <span v-else-if="current && current.kind === 'video'" class="kai-lightbox__video">
+        <span v-else-if="current && current.kind === 'video'" class="kai-lightbox__stage-box">
           <video
-            ref="video"
+            ref="player"
             class="kai-lightbox__media"
-            :src="current ? originalUrl(current.id) : ''"
-            :poster="current ? thumbnailUrl(current.id) : ''"
+            :src="mediaSrc(current)"
+            :poster="current.src ? '' : thumbnailUrl(current.id)"
             @timeupdate="syncProgress"
             @loadedmetadata="syncProgress"
             @pause="playing = false"
@@ -48,18 +49,42 @@
           </span>
         </span>
 
+        <!-- A voice note, or any audio attachment: the same player as a video
+             over the attachment's own line, which is all an audio row has to
+             show. Enter/centre (or a tap) plays and pauses it. -->
+        <span v-else-if="current && current.kind === 'audio'" class="kai-lightbox__stage-box">
+          <audio
+            ref="player"
+            class="kai-lightbox__audio"
+            :src="mediaSrc(current)"
+            @timeupdate="syncProgress"
+            @loadedmetadata="syncProgress"
+            @pause="playing = false"
+            @ended="playing = false"
+          ></audio>
+          <p class="kai-lightbox__line">
+            <span class="kai-post__attach-kind">[{{ t(attachmentKindKey(current.kind)) }}]</span>
+            {{ describeAttachment(current) }}
+          </p>
+          <KaiPlayIcon v-if="!playing" class="kai-lightbox__play" size="lg" />
+          <span class="kai-lightbox__progress">
+            <span class="kai-lightbox__progress-fill" :style="{ width: progress + '%' }"></span>
+          </span>
+        </span>
+
         <!-- A document has no media to be; its line is the lightbox. -->
         <p v-else-if="current" class="kai-lightbox__line">
           <span class="kai-post__attach-kind">[{{ t(attachmentKindKey(current.kind)) }}]</span>
           {{ describeAttachment(current) }}
         </p>
+
+        <!-- Where you are in the set, over the media rather than under it: the
+             picture is the screen, and its counter is a fact about the picture.
+             A lone attachment is not a set, so it carries no count. -->
+        <p v-if="attachments.length > 1" class="kai-lightbox__counter">
+          {{ t('lightbox_counter', { current: index + 1, total: attachments.length }) }}
+        </p>
       </div>
-
-      <p v-if="attachments.length" class="kai-lightbox__counter">
-        {{ t('lightbox_counter', { current: index + 1, total: attachments.length }) }}
-      </p>
-
-      <p v-if="current" class="kai-lightbox__hint">{{ controlHint }}</p>
     </main>
   </div>
 </template>
@@ -85,7 +110,12 @@ const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
 
 const stage = ref<HTMLElement | null>(null);
 const image = ref<HTMLImageElement | null>(null);
-const video = ref<HTMLVideoElement | null>(null);
+/**
+ * The playing element — a `<video>` or an `<audio>`, whichever the current
+ * attachment is. Only one of the two is ever rendered, so they share the ref
+ * and, with it, one play/pause/progress path.
+ */
+const player = ref<HTMLMediaElement | null>(null);
 const uid = ref(0);
 
 const attachments = ref<Attachment[]>([]);
@@ -105,6 +135,15 @@ const playing = ref(false);
 const progress = ref(0);
 
 const current = computed(() => attachments.value[index.value] ?? null);
+
+/**
+ * The bytes to play or show. An attachment that carries its own URL (a voice
+ * note) is loaded from it; everything else is addressed by drive file id, and
+ * the lightbox is the one place that wants the original rather than a preset.
+ */
+function mediaSrc(attachment: Attachment): string {
+  return attachment.src || originalUrl(attachment.id);
+}
 const isSelected = computed(() => uid.value !== 0 && nav.current === uid.value);
 
 /** How far one D-pad press pans a zoomed image — one design-guide row. */
@@ -165,7 +204,7 @@ const imageStyle = computed(() => {
 
 /** Stops any playback and returns the view to fit; called on every switch. */
 function resetView(): void {
-  if (video.value && typeof video.value.pause === 'function') video.value.pause();
+  if (player.value && typeof player.value.pause === 'function') player.value.pause();
   playing.value = false;
   progress.value = 0;
   zoom.value = 1;
@@ -185,9 +224,9 @@ function rotate(delta: number): void {
   layout();
 }
 
-/** Reads the video's position into the progress bar. */
+/** Reads the player's position into the progress bar. */
 function syncProgress(): void {
-  const el = video.value;
+  const el = player.value;
   if (!el) return;
   const duration = el.duration;
   if (!duration || !isFinite(duration) || duration <= 0) {
@@ -216,15 +255,15 @@ function zoomOut(): void {
   }
 }
 
-/** The centre action: play or pause a video. Images have the D-pad. */
+/** The centre action: play or pause the media. Images have the D-pad. */
 function toggle(): void {
   const item = current.value;
-  if (!item || item.kind !== 'video') return;
+  if (!item || (item.kind !== 'video' && item.kind !== 'audio')) return;
   togglePlay();
 }
 
 function togglePlay(): void {
-  const el = video.value;
+  const el = player.value;
   if (playing.value) {
     if (el && typeof el.pause === 'function') el.pause();
     playing.value = false;
@@ -332,15 +371,8 @@ function onKeydown(event: KeyboardEvent): void {
 
 const centerLabel = computed(() => {
   const item = current.value;
-  if (!item || item.kind !== 'video') return '';
+  if (!item || (item.kind !== 'video' && item.kind !== 'audio')) return '';
   return playing.value ? t('lightbox_pause') : t('lightbox_play');
-});
-
-/** The key hint under the stage: what the pad and the 1/3 keys do. */
-const controlHint = computed(() => {
-  const item = current.value;
-  if (!item) return '';
-  return item.kind === 'video' ? t('lightbox_hint_video') : t('lightbox_hint_image');
 });
 
 function parseParams(): void {
@@ -380,7 +412,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (video.value && typeof video.value.pause === 'function') video.value.pause();
+  if (player.value && typeof player.value.pause === 'function') player.value.pause();
   document.removeEventListener('keydown', onKeydown, true);
   window.removeEventListener('resize', layout);
   unregisterSelectable(uid.value);
