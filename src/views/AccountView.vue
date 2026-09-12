@@ -12,15 +12,26 @@
         </KaiList>
       </template>
 
-      <!-- Signing in: the code to type on the approving device. -->
+      <!-- Signing in: scan the QR, or type the code on the approving device. -->
       <template v-else-if="session.phase === 'signing-in'">
-        <p class="kai-text kai-text--secondary">
-          {{ t('account_enter_code', { uri: session.verificationUri }) }}
-        </p>
+        <div v-if="qrData" class="kai-account__qr">
+          <img :src="qrData" alt="" />
+        </div>
 
         <p class="kai-account__code">{{ session.userCode }}</p>
 
-        <KaiSpinner v-if="session.waiting" :label="t('account_waiting')" />
+        <p v-if="session.waiting" class="kai-account__waiting">
+          <span class="kai-spinner__ring"></span>
+          {{ t('account_waiting') }}
+        </p>
+
+        <p class="kai-text kai-text--secondary">
+          {{
+            session.verificationUriComplete
+              ? t('account_scan_qr', { uri: session.verificationUri })
+              : t('account_enter_code', { uri: session.verificationUri })
+          }}
+        </p>
 
         <p v-if="session.errorKey" class="kai-text kai-text--error">{{ t(session.errorKey) }}</p>
 
@@ -48,20 +59,29 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 
 import KaiHeader from '../components/KaiHeader.vue';
 import KaiList from '../components/KaiList.vue';
 import KaiListItem from '../components/KaiListItem.vue';
-import KaiSpinner from '../components/KaiSpinner.vue';
 import { t } from '../kaios/l10n.js';
 import { setBaseSoftkeys } from '../kaios/nav.js';
+import { qrDataUrl } from '../kaios/qrcode.js';
 import { cancelSignIn, session, signOut, startSignIn } from '../kaios/session.js';
 import { canGoBack, pop, push } from '../kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; Account takes none.
 defineProps({
   params: { type: Object, default: () => ({}) },
+});
+
+/**
+ * The QR encodes the code-prefilled verification page when the server sent
+ * one, and the bare page otherwise — the same payload the watch scans.
+ */
+const qrData = computed(() => {
+  const payload = session.verificationUriComplete || session.verificationUri;
+  return payload ? qrDataUrl(payload) : '';
 });
 
 onMounted(() => {

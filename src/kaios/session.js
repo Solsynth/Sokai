@@ -45,6 +45,9 @@ export const session = reactive({
   userCode: '',
   /** The page to open on that device; the code is entered there. */
   verificationUri: '',
+  /** The verification page with the code prefilled, when the server sent it —
+   *  the QR code's payload, so scanning needs no typing. */
+  verificationUriComplete: '',
   /** True while a poll is in flight waiting for approval. */
   waiting: false,
   /** l10n key for the last sign-in failure; '' when the flow is healthy. */
@@ -192,17 +195,19 @@ export async function startSignIn() {
   if (session.phase === 'signing-in') cancelSignIn();
   const generation = ++pollGeneration;
 
-  session.phase = 'signing-in';
-  session.waiting = false;
-  session.errorKey = '';
-  session.userCode = '';
-  session.verificationUri = '';
+    session.phase = 'signing-in';
+    session.waiting = false;
+    session.errorKey = '';
+    session.userCode = '';
+    session.verificationUri = '';
+    session.verificationUriComplete = '';
 
   try {
     const code = await requestDeviceCode();
     if (generation !== pollGeneration) return;
     session.userCode = code.userCode;
     session.verificationUri = code.verificationUri;
+    session.verificationUriComplete = code.verificationUriComplete || '';
     session.waiting = true;
     await poll(code, generation);
   } catch (error) {
@@ -221,6 +226,7 @@ export function cancelSignIn() {
   session.errorKey = '';
   session.userCode = '';
   session.verificationUri = '';
+  session.verificationUriComplete = '';
 }
 
 /**
@@ -274,6 +280,8 @@ async function requestDeviceCode() {
     deviceCode: data.device_code,
     userCode: data.user_code,
     verificationUri: typeof data.verification_uri === 'string' ? data.verification_uri : '',
+    verificationUriComplete:
+      typeof data.verification_uri_complete === 'string' ? data.verification_uri_complete : '',
     expiresIn: typeof data.expires_in === 'number' ? data.expires_in : DEFAULT_EXPIRES_S,
     interval: typeof data.interval === 'number' ? data.interval : 5,
   };

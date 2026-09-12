@@ -155,7 +155,9 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   the root is not consumed, so the platform takes it and leaves the app.
 - **Account** — the device-flow sign-in (OAuth 2.0, RFC 8628) as its own top-level screen,
   reached from the dashboard. Signed out it explains what sign-in is and offers one action;
-  signing in shows the user code large and the verification URI, polls the token endpoint (the
+  signing in shows a QR code encoding the verification page with the user code prefilled
+  (generated locally — `qrcode-generator` — nothing to fetch), the code itself, and the
+  verification URI, polls the token endpoint (the
   interval the server set, growing by five seconds on `slow_down`), and reports denial or
   expiry. Signed in it shows the display name and `@nick` and offers About and **Sign out**,
   which revokes the server session and drops the local one. The flow lives in
@@ -261,6 +263,8 @@ public client id `solian-on-watch`): `POST /stargate/auth/open/device/code` for 
 `POST /stargate/auth/open/token` to poll (`authorization_pending` keeps waiting, `slow_down`
 lengthens the interval, `access_denied`/`expired_token` end it) and to refresh, the profile from
 `GET /stargate/accounts/me`, and `DELETE /stargate/sessions/current` to revoke on sign-out. The
+signing-in screen renders the verification page (user code prefilled) as a QR code, generated
+on-device by the bundled `qrcode-generator` (the watch's vendored encoder does the same). The
 token pair is kept in `localStorage` under `sokai.session` — the only durable store a KaiOS 2.5
 app has — with reads and writes guarded so a host without storage simply runs anonymous.
 

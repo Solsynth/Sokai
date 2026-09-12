@@ -202,6 +202,7 @@ const CANNED = {
       device_code: 'dev-1',
       user_code: 'CODE-1234',
       verification_uri: 'https://solar.app/device',
+      verification_uri_complete: 'https://solar.app/device?user_code=CODE-1234',
       expires_in: 600,
       interval: 1,
     },
@@ -1156,8 +1157,25 @@ check(
 );
 check(
   'the user code and waiting state are shown for the other device',
-  text('.kai-account__code') === 'CODE-1234' && text('.kai-spinner__label') === 'account_waiting',
-  { code: text('.kai-account__code'), waiting: text('.kai-spinner__label') },
+  text('.kai-account__code') === 'CODE-1234' && text('.kai-account__waiting') === 'account_waiting',
+  { code: text('.kai-account__code'), waiting: text('.kai-account__waiting') },
+);
+check(
+  'the signing-in screen shows a QR code encoding the prefilled page',
+  (() => {
+    const image = document.querySelector('.kai-account__qr img');
+    if (!image) return false;
+    const src = image.getAttribute('src');
+    const prefix = 'data:image/svg+xml;charset=utf-8,';
+    if (!src || src.indexOf(prefix) !== 0) return false;
+    // A real QR is drawn: the SVG carries the white backing and module paths.
+    const svg = decodeURIComponent(src.slice(prefix.length));
+    return svg.indexOf('<svg') === 0 && svg.indexOf('<rect') !== -1 && svg.indexOf('<path') !== -1;
+  })(),
+  (() => {
+    const image = document.querySelector('.kai-account__qr img');
+    return image ? image.getAttribute('src') : null;
+  })(),
 );
 
 // The first poll is still pending; the second exchange approves.

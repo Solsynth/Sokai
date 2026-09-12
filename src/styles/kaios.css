@@ -816,6 +816,35 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   line-height: 1.4;
 }
 
+/* The QR sits at the top of the signing-in screen, centred and sized for a
+   camera at reading distance; the lib's SVG carries its own white backing. */
+.kai-account__qr {
+  margin: 0.8rem 0 0;
+  text-align: center;
+}
+
+.kai-account__qr img {
+  width: 14rem;
+  height: 14rem;
+}
+
+/* The waiting state is a compact ring beside the label — the full-page
+   spinner is too tall for a screen that also carries a QR and a code. */
+.kai-account__waiting {
+  display: flex;
+  align-items: center;
+  margin: 0.2rem 0 0.6rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-account__waiting .kai-spinner__ring {
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: 0.8rem;
+  border-width: 0.2rem;
+}
+
 /* The identity block leads the signed-in screen: display name over @nick. */
 .kai-account__identity {
   margin: 0.4rem 0 0.8rem;
