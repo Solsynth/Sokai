@@ -5148,6 +5148,223 @@ check(
   { previews: texts('.kai-chat-row__preview') },
 );
 
+
+/* --- Chat: the highlighted message's options sheet ------------------------ */
+
+// The right softkey carries the highlighted message's options — the same sheet
+// the post screens hang off their highlighted row. The room remounts on every
+// return from a pushed screen, so the highlight restarts each visit; every
+// step walks it to the target row first. The matcher reads the selected
+// bubble's own body — a reply quotes its target's words, so matching the whole
+// bubble text would stop on the reply instead of the message being sought.
+const selectedHasContent = (fragment) => {
+  const selected = document.querySelector('.kai-chat-bubble[nav-selected="true"]');
+  const content = selected ? selected.querySelector('.kai-chat-bubble__content') : null;
+  return Boolean(content) && content.textContent.indexOf(fragment) !== -1;
+};
+const walkToMessage = async (fragment) => {
+  let guard = 0;
+  while (!selectedHasContent(fragment) && guard < 14) {
+    await press('ArrowUp');
+    guard += 1;
+  }
+  return selectedHasContent(fragment);
+};
+const openSheet = () => {
+  document.querySelector('.kai-softkey__key--right').click();
+};
+
+// Reopen the group room (the list's first row) for the message actions.
+await press('Enter');
+await until(() => all('li.kai-chat-bubble').length > 0);
+
+// The account's own server row ("Nice, thanks!", sent by the test user) offers
+// the full action set.
+await walkToMessage('Nice, thanks!');
+check(
+  'the highlight walks to the account\'s own message',
+  selectedHasContent('Nice, thanks!') &&
+    text('.kai-softkey__key--right') === 'action_options',
+  { right: text('.kai-softkey__key--right') },
+);
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+check(
+  "the highlighted message's sheet offers reply, react, edit, delete and refresh",
+  text('.kai-option-menu__header') === 'chat_options' &&
+    texts('.kai-option-menu__item').join('|') ===
+      'action_reply|action_react|chat_edit|chat_delete|action_reload',
+  {
+    header: text('.kai-option-menu__header'),
+    items: texts('.kai-option-menu__item').join('|'),
+  },
+);
+// Back closes the sheet without leaving the thread.
+await press('Backspace');
+await until(() => !document.querySelector('.kai-option-menu'));
+check(
+  'Back closes the message options without leaving the thread',
+  Boolean(document.querySelector('.kai-chat')) && !document.querySelector('.kai-option-menu'),
+  { menu: Boolean(document.querySelector('.kai-option-menu')) },
+);
+
+// Reply opens the composer anchored on the message; the send carries
+// replied_message_id and the sent bubble quotes what it answers.
+await walkToMessage('Nice, thanks!');
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-field__textarea')));
+check(
+  'Reply opens the composer naming the message it answers',
+  text('.kai-content .kai-text--secondary') === 'chat_reply_to(name)',
+  text('.kai-content .kai-text--secondary'),
+);
+const replyField = document.querySelector('.kai-field__textarea');
+replyField.value = 'A reply';
+replyField.dispatchEvent(new window.Event('input', { bubbles: true }));
+await flush();
+await press('SoftRight');
+await until(() => text('.kai-header__title') === 'SN Notes');
+await until(() => Boolean(document.querySelector('.kai-chat-bubble__quote')));
+const replyRequest = requests
+  .filter(
+    (request) =>
+      request.method === 'POST' &&
+      request.url.indexOf('/messager/chat/room-group/messages') !== -1,
+  )
+  .slice(-1)[0];
+check(
+  'a reply sends with replied_message_id and quotes the message',
+  Boolean(replyRequest) &&
+    JSON.parse(replyRequest.requestBody).replied_message_id === 'msg-2' &&
+    text('.kai-chat-bubble__quote-sender') === 'Test User' &&
+    text('.kai-chat-bubble__quote-text') === 'Nice, thanks!',
+  {
+    body: replyRequest ? JSON.parse(replyRequest.requestBody) : null,
+    quote: text('.kai-chat-bubble__quote'),
+  },
+);
+
+// React runs from the sheet: the picker takes the message's own reactions,
+// posts to the message endpoint, and the store updates the bubble's pills.
+await walkToMessage('Nice, thanks!');
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
+await press('Enter');
+await until(() => text('.kai-header__title') === 'action_react');
+check(
+  "React opens the message's reaction picker",
+  text('.kai-header__title') === 'action_react',
+  text('.kai-header__title'),
+);
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-reaction-tile--made')));
+check(
+  'picking a sticker adds the reaction and marks the tile made',
+  window.__reactionPosts === 1 && Boolean(document.querySelector('.kai-reaction-tile--made')),
+  { posts: window.__reactionPosts, made: Boolean(document.querySelector('.kai-reaction-tile--made')) },
+);
+await press('Backspace');
+await until(() => !document.querySelector('.kai-reaction-grid'));
+check(
+  "the reacted message's bubble shows the reaction pill",
+  (() => {
+    const bubble = all('.kai-chat-bubble').find(
+      (node) => node.textContent.indexOf('Nice, thanks!') !== -1,
+    );
+    return Boolean(bubble && bubble.querySelector('.kai-reaction'));
+  })(),
+  { pills: document.querySelectorAll('.kai-chat-bubble .kai-reaction').length },
+);
+
+// Edit opens the composer seeded with the message's text — no media toolbar,
+// the message keeps the media it already has — and saving PATCHes the message.
+await walkToMessage('Nice, thanks!');
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
+await press('ArrowDown');
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-field__textarea')));
+check(
+  "Edit opens the composer seeded with the message's text",
+  document.querySelector('.kai-field__textarea').value === 'Nice, thanks!' &&
+    text('.kai-content .kai-text--secondary') === 'chat_editing' &&
+    !document.querySelector('.kai-compose-media'),
+  {
+    value: document.querySelector('.kai-field__textarea')
+      ? document.querySelector('.kai-field__textarea').value
+      : null,
+    hint: text('.kai-content .kai-text--secondary'),
+    media: Boolean(document.querySelector('.kai-compose-media')),
+  },
+);
+const messageEditField = document.querySelector('.kai-field__textarea');
+messageEditField.value = 'Thanks, now edited!';
+messageEditField.dispatchEvent(new window.Event('input', { bubbles: true }));
+await flush();
+await press('SoftRight');
+await until(() => text('.kai-header__title') === 'SN Notes');
+await until(() =>
+  all('.kai-chat-bubble').some((node) => node.textContent.indexOf('Thanks, now edited!') !== -1),
+);
+const editRequest = requests.filter(
+  (request) =>
+    request.method === 'PATCH' &&
+    request.url.indexOf('/messager/chat/room-group/messages/msg-2') !== -1,
+)[0];
+check(
+  'saving an edit PATCHes the message and marks the bubble edited',
+  Boolean(editRequest) &&
+    JSON.parse(editRequest.requestBody).content === 'Thanks, now edited!' &&
+    (() => {
+      const bubble = all('.kai-chat-bubble').find(
+        (node) => node.textContent.indexOf('Thanks, now edited!') !== -1,
+      );
+      return Boolean(bubble && bubble.querySelector('.kai-chat-bubble__edited'));
+    })(),
+  {
+    body: editRequest ? JSON.parse(editRequest.requestBody) : null,
+    edited: (() => {
+      const bubble = all('.kai-chat-bubble').find(
+        (node) => node.textContent.indexOf('Thanks, now edited!') !== -1,
+      );
+      return Boolean(bubble && bubble.querySelector('.kai-chat-bubble__edited'));
+    })(),
+  },
+);
+
+// Delete asks once and acts on the second press; the row leaves the thread.
+await walkToMessage('Thanks, now edited!');
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
+await press('ArrowDown');
+await press('ArrowDown');
+await press('Enter');
+check(
+  'the first delete press asks for confirmation',
+  texts('.kai-option-menu__item').join('|').indexOf('chat_delete_confirm') !== -1,
+  texts('.kai-option-menu__item').join('|'),
+);
+await press('Enter');
+await until(() => !document.querySelector('.kai-option-menu'));
+await until(() =>
+  !all('.kai-chat-bubble').some((node) => node.textContent.indexOf('Thanks, now edited!') !== -1),
+);
+check(
+  'the second delete press removes the message from the thread',
+  window.__deletedMessages === 1 &&
+    !all('.kai-chat-bubble').some((node) => node.textContent.indexOf('Thanks, now edited!') !== -1),
+  { deleted: window.__deletedMessages },
+);
+
+// Back to the list for the search that follows.
+await press('Backspace');
+await until(() => text('.kai-header__title') === 'nav_chat');
+
 /* --- Chat: the thread is a window on the room's history ------------------- */
 
 // The long room is reached through chat search rather than from the list, so
