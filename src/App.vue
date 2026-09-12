@@ -12,6 +12,7 @@ import KaiSoftkey from './components/KaiSoftkey.vue';
 import { setBackHandler } from './kaios/keys.js';
 import { canGoBack, currentView, pop } from './kaios/views.js';
 import AboutView from './views/AboutView.vue';
+import AccountView from './views/AccountView.vue';
 import DashboardView from './views/DashboardView.vue';
 import ExploreView from './views/ExploreView.vue';
 import PostView from './views/PostView.vue';
@@ -22,6 +23,7 @@ const VIEWS = {
   explore: ExploreView,
   search: SearchView,
   post: PostView,
+  account: AccountView,
   about: AboutView,
 };
 

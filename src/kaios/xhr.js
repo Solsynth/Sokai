@@ -41,8 +41,10 @@ function responseHeaders(xhr) {
 }
 
 /**
- * The API's error envelope is `{ code, message, ... }`; anything else that comes
- * back with a failure status is reported as a bare HTTP status.
+ * The API's error envelope is `{ code, message, ... }`; Stargate's auth
+ * endpoints answer `{ error: 'authorization_pending' | ... }` while a device
+ * flow is pending or terminal. Anything else that comes back with a failure
+ * status is reported as a bare HTTP status.
  */
 function httpError(xhr) {
   const error = new Error('HTTP ' + xhr.status);
@@ -52,6 +54,7 @@ function httpError(xhr) {
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
     if (typeof detail.code === 'string') error.code = detail.code;
     if (typeof detail.message === 'string') error.message = detail.message;
+    if (typeof detail.error === 'string') error.error = detail.error;
   }
 
   return error;
@@ -60,8 +63,10 @@ function httpError(xhr) {
 /**
  * @param {string} url
  * @param {{ method?: string, headers?: object, body?: unknown, timeout?: number }} [options]
- *   `body`, when present, is serialised as JSON. `User-Agent` is never set:
- *   browsers forbid it and send the platform's own.
+ *   `body`, when a string, is sent verbatim (the device flow posts
+ *   form-encoded data, so the caller owns the `Content-Type`); any other value
+ *   is serialised as JSON. `User-Agent` is never set: browsers forbid it and
+ *   send the platform's own.
  * @returns {Promise<{ status: number, headers: object, data: unknown }>}
  */
 export function request(url, { method = 'GET', headers = {}, body = null, timeout = DEFAULT_TIMEOUT_MS } = {}) {
@@ -82,9 +87,9 @@ export function request(url, { method = 'GET', headers = {}, body = null, timeou
       if (name.toLowerCase() === 'content-type') hasContentType = true;
       outgoing[name] = headers[name];
     }
-    // JSON is the only body this app sends; callers should not have to remember
-    // the header.
-    if (body !== null && body !== undefined && !hasContentType) {
+    // JSON is the default body type this app sends; callers should not have to
+    // remember the header. String bodies are pre-encoded and carry their own.
+    if (body !== null && body !== undefined && typeof body !== 'string' && !hasContentType) {
       outgoing['Content-Type'] = 'application/json';
     }
 
@@ -103,6 +108,8 @@ export function request(url, { method = 'GET', headers = {}, body = null, timeou
     xhr.onerror = () => reject(new Error('Network error'));
     xhr.ontimeout = () => reject(new Error('Timeout'));
 
-    xhr.send(body === null || body === undefined ? undefined : JSON.stringify(body));
+    xhr.send(
+      body === null || body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+    );
   });
 }

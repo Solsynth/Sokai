@@ -26,7 +26,7 @@
           v-for="entry in ENTRIES"
           :key="entry.view"
           :primary="t(entry.title)"
-          :secondary="t(entry.description)"
+          :secondary="entry.view === 'account' ? accountDescription : t(entry.description)"
           @select="push(entry.view)"
         />
       </KaiList>
@@ -44,6 +44,7 @@ import { countdownLabel } from '../api/models.js';
 import { listCountdowns } from '../api/solian.js';
 import { t } from '../kaios/l10n.js';
 import { setBaseSoftkeys } from '../kaios/nav.js';
+import { session } from '../kaios/session.js';
 import { push } from '../kaios/views.js';
 
 // Every screen is mounted with its stack entry's parameters; the dashboard takes none.
@@ -53,8 +54,20 @@ defineProps({
 
 const ENTRIES = [
   { view: 'explore', title: 'nav_explore', description: 'nav_explore_desc' },
+  { view: 'account', title: 'nav_account', description: 'nav_account_desc' },
   { view: 'about', title: 'nav_about', description: 'nav_about_desc' },
 ];
+
+/**
+ * The account row reports the session: the signed-in identity when there is
+ * one, the plain description when there is not.
+ */
+const accountDescription = computed(() => {
+  if (session.phase === 'signed-in' && session.account) {
+    return t('account_signed_in_as', { name: session.account.display });
+  }
+  return t('nav_account_desc');
+});
 
 const SECOND_MS = 1000;
 const MINUTE_MS = 60000;

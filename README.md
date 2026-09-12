@@ -7,18 +7,21 @@ Vue 3 + Vite app packaged as a KaiOS 2.5 *privileged* Open Web App.
 ## What it does
 
 The app opens on a **dashboard** — the brand mark with a clock and a countdown to the next
-Solar Network event, and one row per top-level screen, currently Explore and About, with room
-for the log-in and notification entries that come next. Explore lists public Solar Network posts
+Solar Network event, and one row per top-level screen: Explore, **Account** and About, with room
+for the notification entry that comes next. Explore lists Solar Network posts
 from `api.solian.app`, with pictures, and the page-flip controls sit above the feed in one row —
 previous, the page count, next — under a searchbar that pushes the **Search** screen: a field,
 and the same page controls over its results. Opening a post shows its body as markdown, its
-attachments above the card, and its replies underneath. D-pad and softkeys only. The right
+attachments above the card, and its replies underneath. **Account** signs in through the OAuth 2.0
+device flow (the code to type on another device), shows the signed-in identity, and signs out.
+D-pad and softkeys only. The right
 softkey is held for the write actions that follow the read path — reply, reactions — and is
 empty until they land.
 
-Every read route is anonymous — no `Authorization` header — and the server limits anonymous
-responses to published, non-draft, public posts. Composing, reactions and video playback are not
-implemented yet; nothing in this increment writes to the API.
+Reads go out with the session's `Authorization: Bearer` header when one exists, and anonymously
+otherwise; the server limits anonymous responses to published, non-draft, public posts. Composing,
+reactions and video playback are not implemented yet; nothing in this increment writes to the API
+except signing in and out.
 
 ## Quick start
 
@@ -144,11 +147,20 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   alive before the first request resolves. It shows `HH:MM`, not seconds, and its timer is armed
   on the minute boundary — one wake-up a minute instead of sixty — and dropped while the app is
   not visible, so the dashboard does not spend battery repainting the same two digits. The
-  countdown is the one request the dashboard makes, fetched from the calendar/countdown route
-  under a named account (the `/accounts/me` variant needs a session this app does not have yet);
-  a failure hides the line rather than erroring the screen. This is the extension point — a new
+  countdown is the one request the dashboard makes, fetched from the calendar/countdown route —
+  from the user's own account when a session exists, else from a named account's public mix
+  (`solsynth`); a failure hides the line rather than erroring the screen. This is the extension
+  point — a new
   screen is a row in `DashboardView.vue`'s `ENTRIES` plus a view in `App.vue`'s map. Back at
   the root is not consumed, so the platform takes it and leaves the app.
+- **Account** — the device-flow sign-in (OAuth 2.0, RFC 8628) as its own top-level screen,
+  reached from the dashboard. Signed out it explains what sign-in is and offers one action;
+  signing in shows the user code large and the verification URI, polls the token endpoint (the
+  interval the server set, growing by five seconds on `slow_down`), and reports denial or
+  expiry. Signed in it shows the display name and `@nick` and offers About and **Sign out**,
+  which revokes the server session and drops the local one. The flow lives in
+  `src/kaios/session.js` and mirrors SolianWatch's standalone auth, sharing its public client
+  id (`solian-on-watch`).
 - **Icons** — the Solar Network brand artwork from the Solian client's asset set, whose licence is
   copied to `public/img/icons/LICENSE.md` next to it (that licence is not the Apache-2.0 the rest
   of this repository uses). Generated from the 2050px padded source at 78% coverage of a square
@@ -232,17 +244,25 @@ send no CORS headers. That privilege only applies to `XMLHttpRequest` created wi
 list reports its row count in `x-total`) and the parsed body, and takes a method and a JSON body
 for the write paths that come later.
 
-`src/api/solian.js` is the only module that knows an API URL. Every route it calls is anonymous:
-public Sphere reads need no `Authorization` header, and the server limits anonymous responses to
+`src/api/solian.js` is the only module that knows an API URL. Every call goes out with an
+`Authorization: Bearer` header when a session exists (refreshed lazily by `src/kaios/session.js`
+when the token nears expiry) and anonymously otherwise; the server limits anonymous responses to
 published, non-draft, public posts. Search is the post list with a `query` term — the server's
 semantic engine answers it, which is why a search can take a few seconds — and people search
-(`/stargate/accounts/search`) exists on the server for when a People scope is added. The one exception to "reads" is the dashboard's countdown,
-which uses the calendar/countdown route under a named account (`solsynth`, one constant at the
-top of the module): the `/accounts/me` variant requires a session, so the countdown is read the
-way the app can read it, and the response mixes the named account's public events with the
-network's own notable days — the account name is swapped for `me` when log-in lands. The edge
+(`/stargate/accounts/search`) exists on the server for when a People scope is added. The dashboard's countdown
+uses the calendar/countdown route: the `/accounts/me` variant when signed in, falling back to a
+named account (`solsynth`, one constant at the top of the module) whose public events mix with
+the network's own notable days. The edge
 happens to send CORS headers as well, so the same code works in the desktop dev server — but the
 privileged path is what matters on a handset.
+
+Sign-in is the OAuth 2.0 **device flow** against Stargate (mirroring SolianWatch, sharing its
+public client id `solian-on-watch`): `POST /stargate/auth/open/device/code` for the code,
+`POST /stargate/auth/open/token` to poll (`authorization_pending` keeps waiting, `slow_down`
+lengthens the interval, `access_denied`/`expired_token` end it) and to refresh, the profile from
+`GET /stargate/accounts/me`, and `DELETE /stargate/sessions/current` to revoke on sign-out. The
+token pair is kept in `localStorage` under `sokai.session` — the only durable store a KaiOS 2.5
+app has — with reads and writes guarded so a host without storage simply runs anonymous.
 
 ## Layout
 

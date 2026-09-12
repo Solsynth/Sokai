@@ -8,11 +8,26 @@
  */
 
 import { request } from '../kaios/xhr.js';
+import { bearerToken } from '../kaios/session.js';
 import { normalizeCountdownList, normalizePost, normalizePostList } from './models.js';
 
 export const API_BASE_URL = 'https://api.solian.app';
 
 const DEFAULT_TAKE = 20;
+
+/**
+ * Headers for an API call. Anonymous callers send only `Accept`; a live
+ * session adds `Authorization: Bearer <token>` (refreshed lazily by the
+ * session module when near expiry), which lifts the server's anonymous
+ * limits — friends-only, unlisted and draft posts become visible, and
+ * per-account routes answer.
+ */
+async function apiHeaders() {
+  const headers = { Accept: 'application/json' };
+  const token = await bearerToken();
+  if (token) headers.Authorization = 'Bearer ' + token;
+  return { headers };
+}
 
 /**
  * A published file, as an `<img>` can load it. The endpoint answers `307` to a
@@ -37,10 +52,6 @@ function readTotal(headers) {
   return Number.isNaN(total) ? 0 : total;
 }
 
-function accept() {
-  return { headers: { Accept: 'application/json' } };
-}
-
 /**
  * @param {{ take?: number, offset?: number, query?: string }} [options]
  *   `query` is the server's post search term (the semantic engine answers it);
@@ -52,7 +63,7 @@ export async function listPosts({ take = DEFAULT_TAKE, offset = 0, query = '' } 
     API_BASE_URL + '/sphere/posts?take=' + take + '&offset=' + offset + '&replies=false&orderDesc=true';
   if (query) url += '&query=' + encodeURIComponent(query);
 
-  const response = await request(url, accept());
+  const response = await request(url, await apiHeaders());
   return { posts: normalizePostList(response.data), total: readTotal(response.headers) };
 }
 
@@ -63,18 +74,15 @@ export async function listPosts({ take = DEFAULT_TAKE, offset = 0, query = '' } 
 export async function getPost(id) {
   const url = API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id);
 
-  const response = await request(url, accept());
+  const response = await request(url, await apiHeaders());
   return normalizePost(response.data);
 }
 
 /**
- * Whose calendar the dashboard counts down to.
- *
- * The `/calendar/countdown` route under `/accounts/me` needs a session, which
- * this increment does not have; the name-scoped route is anonymous, and the
- * response mixes the named account's public events with the network's own
- * notable days. The developer account is used so the mix is the network's, not a
- * private person's — swap this name, or move to `me`, when log-in lands.
+ * Whose calendar the dashboard counts down to. Signed in, the countdown comes
+ * from the user's own account (`me`); anonymous, the name-scoped route is
+ * used — the public events of the developer account mixed with the network's
+ * own notable days.
  */
 const COUNTDOWN_ACCOUNT = 'solsynth';
 
@@ -83,6 +91,16 @@ const COUNTDOWN_ACCOUNT = 'solsynth';
  * @returns {Promise<Array<object>>} soonest first, as the server orders them
  */
 export async function listCountdowns({ take = 3 } = {}) {
+  const token = await bearerToken();
+  if (token) {
+    try {
+      const url = API_BASE_URL + '/passport/accounts/me/calendar/countdown?take=' + take;
+      const response = await request(url, await apiHeaders());
+      return normalizeCountdownList(response.data);
+    } catch (error) {
+      // The signed-in route is per-account; fall back to the public mix.
+    }
+  }
   const url =
     API_BASE_URL +
     '/passport/accounts/' +
@@ -90,7 +108,7 @@ export async function listCountdowns({ take = 3 } = {}) {
     '/calendar/countdown?take=' +
     take;
 
-  const response = await request(url, accept());
+  const response = await request(url, await apiHeaders());
   return normalizeCountdownList(response.data);
 }
 
@@ -103,6 +121,6 @@ export async function listReplies(id, { take = DEFAULT_TAKE, offset = 0 } = {}) 
   const url =
     API_BASE_URL + '/sphere/posts/' + encodeURIComponent(id) + '/replies?take=' + take + '&offset=' + offset;
 
-  const response = await request(url, accept());
+  const response = await request(url, await apiHeaders());
   return { posts: normalizePostList(response.data), total: readTotal(response.headers) };
 }

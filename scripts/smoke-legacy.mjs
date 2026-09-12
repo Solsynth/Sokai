@@ -193,6 +193,27 @@ const CANNED = {
   list: { status: 200, headers: 'x-total: 42\r\n', body: FEED },
   detail: { status: 200, headers: '', body: DETAIL },
   replies: { status: 200, headers: 'x-total: 21\r\n', body: REPLIES },
+  /* Stargate device flow: one code request, one pending poll, then approval.
+     `interval: 1` keeps the poll fast enough for the gate's real timers. */
+  deviceCode: {
+    status: 200,
+    headers: '',
+    body: {
+      device_code: 'dev-1',
+      user_code: 'CODE-1234',
+      verification_uri: 'https://solar.app/device',
+      expires_in: 600,
+      interval: 1,
+    },
+  },
+  tokenPending: { status: 400, headers: '', body: { error: 'authorization_pending' } },
+  tokenOk: {
+    status: 200,
+    headers: '',
+    body: { access_token: 'test-access', refresh_token: 'test-refresh', expires_in: 3600 },
+  },
+  me: { status: 200, headers: '', body: { id: 'acc-1', name: 'Test User', nick: 'testuser' } },
+  revoke: { status: 200, headers: '', body: {} },
   /** Milliseconds to hold the feed's next-page response, so the loading UI is observable. */
   delayFlip: 60,
 };
@@ -256,6 +277,7 @@ const PREAMBLE = `<script>
   var CANNED = ${JSON.stringify(CANNED)};
 
   window.__requests = [];
+  var __tokenPolls = 0;
   window.XMLHttpRequest = function (options) {
     this.options = options;
     this.responseType = '';
@@ -263,6 +285,7 @@ const PREAMBLE = `<script>
     this.status = 0;
     this.requestHeaders = {};
     this.responseHeaders = '';
+    this.requestBody = '';
   };
   window.XMLHttpRequest.prototype.open = function (method, url) {
     this.method = method;
@@ -274,7 +297,8 @@ const PREAMBLE = `<script>
   window.XMLHttpRequest.prototype.getAllResponseHeaders = function () {
     return this.responseHeaders;
   };
-  window.XMLHttpRequest.prototype.send = function () {
+  window.XMLHttpRequest.prototype.send = function (body) {
+    this.requestBody = body;
     window.__requests.push(this);
     var xhr = this;
     setTimeout(function () { respond(xhr); }, 0);
@@ -288,6 +312,24 @@ const PREAMBLE = `<script>
 
   function respond(xhr) {
     var url = xhr.url;
+    if (url.indexOf('/stargate/auth/open/device/code') !== -1) {
+      xhr.respond(CANNED.deviceCode.status, CANNED.deviceCode.body, CANNED.deviceCode.headers);
+      return;
+    }
+    if (url.indexOf('/stargate/auth/open/token') !== -1) {
+      __tokenPolls += 1;
+      var tokenStep = __tokenPolls === 1 ? CANNED.tokenPending : CANNED.tokenOk;
+      xhr.respond(tokenStep.status, tokenStep.body, tokenStep.headers);
+      return;
+    }
+    if (url.indexOf('/stargate/accounts/me') !== -1) {
+      xhr.respond(CANNED.me.status, CANNED.me.body, CANNED.me.headers);
+      return;
+    }
+    if (url.indexOf('/stargate/sessions/current') !== -1) {
+      xhr.respond(CANNED.revoke.status, CANNED.revoke.body, CANNED.revoke.headers);
+      return;
+    }
     var canned = url.indexOf('/calendar/countdown') !== -1
       ? CANNED.countdown
       : url.indexOf('/replies') !== -1
@@ -369,6 +411,20 @@ async function until(predicate) {
 }
 
 /**
+ * Like `until`, but for work paced by real timers — the device-flow poll
+ * sleeps whole seconds between exchanges, which `flush()` (a 0ms turn) cannot
+ * advance. Walks the clock in small steps up to `budgetMs`.
+ */
+async function untilTimer(predicate, budgetMs = 8000) {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+/**
  * Dispatches a hardware key and waits for Vue to patch the DOM. Vue batches
  * renders into a microtask, so asserting straight after `dispatchEvent` reads
  * the previous state.
@@ -385,8 +441,8 @@ async function press(key) {
 check('the app opens on the dashboard', text('.kai-header__title') === 'app_title', text('.kai-header__title'));
 check(
   'the dashboard lists the top-level screens',
-  texts('.kai-list-item__primary').join('|') === 'nav_explore|nav_about' &&
-    texts('.kai-list-item__secondary').join('|') === 'nav_explore_desc|nav_about_desc',
+  texts('.kai-list-item__primary').join('|') === 'nav_explore|nav_account|nav_about' &&
+    texts('.kai-list-item__secondary').join('|') === 'nav_explore_desc|nav_account_desc|nav_about_desc',
   { primary: texts('.kai-list-item__primary'), secondary: texts('.kai-list-item__secondary') },
 );
 check(
@@ -409,7 +465,7 @@ check(
 );
 check(
   'the dashboard entries are rows, not cards',
-  Boolean(document.querySelector('.kai-list--flat')) && all('.kai-list-item').length === 2,
+  Boolean(document.querySelector('.kai-list--flat')) && all('.kai-list-item').length === 3,
   { flat: Boolean(document.querySelector('.kai-list--flat')), entries: all('.kai-list-item').length },
 );
 await until(() => Boolean(document.querySelector('.kai-hero__countdown')));
@@ -950,7 +1006,9 @@ check(
 );
 
 await press('Enter');
-await until(() => requests.length === 6);
+// The flip replaces the reply list, so wait for the rendered result, not just
+// the request: the loading state and the canned response race the check.
+await until(() => requests.length === 6 && all('li.kai-post').length === 1);
 
 check(
   'flipping the reply page fetches the next offset and replaces the list',
@@ -978,10 +1036,10 @@ check(
 // Explore is no longer the top level: its Back goes up to the dashboard, and the
 // dashboard is where the platform takes Back.
 await press('SoftLeft');
-await until(() => document.querySelectorAll('.kai-list-item').length === 2);
+await until(() => document.querySelectorAll('.kai-list-item').length === 3);
 check(
   'Back returns to the dashboard',
-  text('.kai-header__title') === 'app_title' && all('.kai-list-item').length === 2,
+  text('.kai-header__title') === 'app_title' && all('.kai-list-item').length === 3,
   { title: text('.kai-header__title'), entries: all('.kai-list-item').length },
 );
 
@@ -992,6 +1050,8 @@ check(
   navState(all('.kai-list-item')),
 );
 
+// The third row is About; the second is the new Account screen.
+await press('ArrowDown');
 await press('Enter');
 await until(() => text('.kai-header__title') === 'nav_about');
 const about = text('.kai-content');
@@ -1002,7 +1062,7 @@ check('About shows the compiled version', about.includes('0.2.0'), about);
 check('About shows the compiled target', about.includes('KaiOS 2.5 (Gecko 48)'), about);
 
 await press('SoftLeft');
-await until(() => document.querySelectorAll('.kai-list-item').length === 2);
+await until(() => document.querySelectorAll('.kai-list-item').length === 3);
 
 /* --- Search ------------------------------------------------------------ */
 
@@ -1062,7 +1122,116 @@ check(
 await press('SoftLeft');
 await until(() => text('.kai-header__title') === 'nav_explore');
 await press('SoftLeft');
-await until(() => document.querySelectorAll('.kai-list-item').length === 2);
+await until(() => document.querySelectorAll('.kai-list-item').length === 3);
+
+/* --- Account: the device flow ---------------------------------------------- */
+
+// The dashboard's second row is Account; enter it while signed out.
+await press('ArrowDown');
+await press('Enter');
+await until(() => text('.kai-header__title') === 'nav_account');
+check(
+  'the account screen offers sign-in when signed out',
+  text('.kai-content > .kai-text') === 'account_sign_in_intro' &&
+    texts('.kai-list-item__primary').join('|') === 'account_sign_in',
+  {
+    intro: text('.kai-content > .kai-text'),
+    rows: texts('.kai-list-item__primary'),
+  },
+);
+
+// Start the flow: the Sign in row is the only row.
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-account__code')));
+const codeRequest = requests.filter(
+  (request) => request.url.indexOf('/stargate/auth/open/device/code') !== -1,
+)[0];
+check(
+  'the device flow asks Stargate for a code as the shared client',
+  Boolean(codeRequest) &&
+    codeRequest.method === 'POST' &&
+    codeRequest.requestBody.indexOf('client_id=solian-on-watch') !== -1 &&
+    codeRequest.requestBody.indexOf('scope=*') !== -1,
+  codeRequest ? { method: codeRequest.method, body: codeRequest.requestBody } : null,
+);
+check(
+  'the user code and waiting state are shown for the other device',
+  text('.kai-account__code') === 'CODE-1234' && text('.kai-spinner__label') === 'account_waiting',
+  { code: text('.kai-account__code'), waiting: text('.kai-spinner__label') },
+);
+
+// The first poll is still pending; the second exchange approves.
+await untilTimer(() => Boolean(document.querySelector('.kai-account__name')));
+const tokenRequests = requests.filter(
+  (request) => request.url.indexOf('/stargate/auth/open/token') !== -1,
+);
+check(
+  'the poll exchanges the device code twice, pending then approved',
+  tokenRequests.length === 2 &&
+    decodeURIComponent(tokenRequests[0].requestBody).indexOf(
+      'grant_type=urn:ietf:params:oauth:grant-type:device_code',
+    ) !== -1 &&
+    tokenRequests[0].requestBody.indexOf('device_code=dev-1') !== -1,
+  tokenRequests.map((request) => decodeURIComponent(request.requestBody)),
+);
+const meRequest = requests.filter(
+  (request) => request.url.indexOf('/stargate/accounts/me') !== -1,
+)[0];
+check(
+  'the profile is fetched with the new token',
+  Boolean(meRequest) && meRequest.requestHeaders.Authorization === 'Bearer test-access',
+  meRequest ? meRequest.requestHeaders : null,
+);
+check(
+  'the account screen shows the signed-in identity',
+  text('.kai-account__name') === 'testuser' && text('.kai-account__handle') === '@testuser',
+  { name: text('.kai-account__name'), handle: text('.kai-account__handle') },
+);
+
+// Back to the dashboard: the feed now goes out authenticated.
+await press('SoftLeft');
+await until(() => text('.kai-header__title') === 'app_title');
+await press('Enter');
+await until(() => all('li.kai-post').length > 0);
+const authedFeed = requests
+  .filter(
+    (request) =>
+      request.url.indexOf('/sphere/posts?') !== -1 && request.url.indexOf('query=') === -1,
+  )
+  .slice(-1)[0];
+check(
+  'the feed is authenticated after sign-in',
+  Boolean(authedFeed) && authedFeed.requestHeaders.Authorization === 'Bearer test-access',
+  authedFeed ? authedFeed.requestHeaders : null,
+);
+await press('SoftLeft');
+await until(() => text('.kai-header__title') === 'app_title');
+
+// Sign out: revoke the server session, then the local one.
+await press('ArrowDown');
+await press('Enter');
+await until(() => text('.kai-header__title') === 'nav_account');
+await press('ArrowDown');
+await press('Enter');
+await until(() => texts('.kai-list-item__primary').join('|') === 'account_sign_in');
+const revokeRequest = requests.filter(
+  (request) => request.url.indexOf('/stargate/sessions/current') !== -1,
+)[0];
+check(
+  'signing out revokes the server session',
+  Boolean(revokeRequest) &&
+    revokeRequest.method === 'DELETE' &&
+    revokeRequest.requestHeaders.Authorization === 'Bearer test-access',
+  revokeRequest ? { method: revokeRequest.method, headers: revokeRequest.requestHeaders } : null,
+);
+check(
+  'signing out returns to the sign-in prompt',
+  text('.kai-content > .kai-text') === 'account_sign_in_intro' &&
+    texts('.kai-list-item__primary').join('|') === 'account_sign_in',
+  { intro: text('.kai-content > .kai-text'), rows: texts('.kai-list-item__primary') },
+);
+await press('SoftLeft');
+await until(() => text('.kai-header__title') === 'app_title');
 
 const backEvent = await press('Backspace');
 check('Back at the top level is left to the platform', backEvent.defaultPrevented === false);

@@ -803,3 +803,32 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 .kai-md__link {
   color: var(--kai-color-accent);
 }
+
+/* --- Account --------------------------------------------------------- */
+
+/* The code is the whole screen while it is on it: big, spaced, and readable
+   from the hand while the other hand types it into the approving device. */
+.kai-account__code {
+  margin: 0.8rem 0 1.2rem;
+  font-size: 2.4rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+}
+
+/* The identity block leads the signed-in screen: display name over @nick. */
+.kai-account__identity {
+  margin: 0.4rem 0 0.8rem;
+}
+
+.kai-account__name {
+  margin: 0;
+  font-size: var(--kai-fs-p-pri);
+  font-weight: 600;
+}
+
+.kai-account__handle {
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
