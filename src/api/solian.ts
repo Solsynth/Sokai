@@ -14,6 +14,7 @@ import { request, type ApiResponse, type HttpError, type RequestOptions } from '
 import { bearerToken } from '~/src/kaios/session.js';
 import {
   fileIdOf,
+  normalizeAccountStatus,
   normalizeAppNotificationList,
   normalizeCalendarMonth,
   normalizeChatAccountList,
@@ -23,11 +24,16 @@ import {
   normalizeChatRoom,
   normalizeChatRoomList,
   normalizeChatSummaryMap,
+  normalizeCheckInResult,
   normalizeCountdownList,
+  normalizeFortuneSaying,
   normalizeStickerPackList,
   normalizePost,
   normalizePostList,
   normalizePublisherList,
+  type AccountStatus,
+  type CheckInResult,
+  type FortuneSaying,
   type AppNotification,
   type CalendarDay,
   type ChatAccount,
@@ -724,4 +730,103 @@ export async function markNotificationRead(id: string): Promise<void> {
  */
 export async function markAllNotificationsRead(): Promise<void> {
   await authedRequest(API_BASE_URL + '/metoer/notifications/all/read', { method: 'POST' });
+}
+
+/* --- Account status ------------------------------------------------------ */
+
+const STATUS_URL = API_BASE_URL + '/passport/accounts/me/statuses';
+
+/**
+ * The signed-in account's presence status. `null` when none is set — the
+ * endpoint answers 404 then, which is the API's own "no status" signal (the
+ * watch client treats the same 404 as nil).
+ */
+export async function fetchAccountStatus(): Promise<AccountStatus | null> {
+  try {
+    const response = await authedRequest(STATUS_URL);
+    return normalizeAccountStatus(response.data);
+  } catch (error) {
+    if ((error as HttpError).status === 404) return null;
+    throw error;
+  }
+}
+
+/** What the status composer edits; the API layer owns the wire shape. */
+export interface StatusDraft {
+  /** 0 online, 1 busy, 2 do-not-disturb, 3 invisible. */
+  type: number;
+  /** 0 positive, 1 neutral, 2 negative. */
+  attitude: number;
+  /** The custom label; '' to leave it out. */
+  label: string;
+  /** The emoji symbol; '' to leave it out. */
+  symbol: string;
+  /** Epoch ms the status auto-clears at; 0 for never. */
+  clearedAt: number;
+}
+
+/**
+ * Creates or updates the custom status: POST when none is customized, PATCH
+ * when one exists — they are different rows server-side, and a PATCH against
+ * nothing would 404. `editing` is the caller's read of `is_customized` from a
+ * fresh fetch, the same method-choice the watch client makes.
+ */
+export async function saveAccountStatus(draft: StatusDraft, editing: boolean): Promise<void> {
+  const body: Record<string, unknown> = {
+    attitude: draft.attitude,
+    type: draft.type,
+  };
+  if (draft.label.trim()) body.label = draft.label.trim();
+  if (draft.symbol.trim()) body.symbol = draft.symbol.trim();
+  if (draft.clearedAt > 0) body.cleared_at = new Date(draft.clearedAt).toISOString();
+
+  await authedRequest(STATUS_URL, { method: editing ? 'PATCH' : 'POST', body });
+}
+
+/** Clears the custom status; a 204 is the healthy answer. */
+export async function clearAccountStatus(): Promise<void> {
+  await authedRequest(STATUS_URL, { method: 'DELETE' });
+}
+
+/* --- Check-in & fortune --------------------------------------------------- */
+
+const CHECK_IN_URL = API_BASE_URL + '/passport/accounts/me/check-in?version=2';
+
+/**
+ * Today's check-in result, or `null` when the account has not checked in
+ * today — the endpoint answers 404 then, which is the API's own "no check-in"
+ * signal (the watch client treats the same 404 as nil).
+ */
+export async function fetchCheckInResult(): Promise<CheckInResult | null> {
+  try {
+    const response = await authedRequest(CHECK_IN_URL);
+    return normalizeCheckInResult(response.data);
+  } catch (error) {
+    if ((error as HttpError).status === 404) return null;
+    throw error;
+  }
+}
+
+/**
+ * Performs today's check-in (`POST /passport/accounts/me/check-in?version=2`)
+ * and returns the fresh result. `null` when the body does not parse as a
+ * check-in result — the caller treats that as a failed check-in.
+ */
+export async function checkIn(): Promise<CheckInResult | null> {
+  const response = await authedRequest(CHECK_IN_URL, { method: 'POST' });
+  return normalizeCheckInResult(response.data);
+}
+
+/**
+ * Today's fortune saying (`GET /passport/fortune/daily`). Advisory: a failure
+ * returns `null` rather than throwing, mirroring the watch client's "daily
+ * fortune is non-fatal" handling.
+ */
+export async function fetchDailyFortune(): Promise<FortuneSaying | null> {
+  try {
+    const response = await authedRequest(API_BASE_URL + '/passport/fortune/daily');
+    return normalizeFortuneSaying(response.data);
+  } catch (error) {
+    return null;
+  }
 }

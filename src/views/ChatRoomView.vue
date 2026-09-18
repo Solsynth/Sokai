@@ -164,6 +164,60 @@ const selectedMessage = computed(
   () => displayMessages.value.find((message) => message.id === selectedId.value) ?? null,
 );
 
+/* --- Thread scroll: newest message at the bottom -------------------------
+ * Landing on the newest message is the chat convention, but the nav layer
+ * alone cannot guarantee it: its entry rule selects the newest message *with
+ * media* (something the highlight can open), and `scrollIntoViewNearest` then
+ * stops with that row at the bottom edge — newer text rows sit below the
+ * fold. And a cache-first entry shows the stored page, then merges newer
+ * rows the remote page adds beneath it, after the entry scroll has run. So
+ * the thread sticks to the absolute bottom while the reader has not moved:
+ * any growth at the newest end (the entry paint, the remote merge, a live
+ * message) scrolls the newest row into the bottom corner. The first
+ * highlight change is the nav layer's entry pick, not a move; anything after
+ * it hands the scroll to the reader.
+ */
+
+/**
+ * The nav layer's entry pick. The first time the highlight lands it is this
+ * automatic pick (the initial media/newest row); a later change to a
+ * different row is the reader pressing the D-pad.
+ */
+const entryPick = ref('');
+/**
+ * True while the thread follows its bottom edge. Turned off the moment the
+ * reader moves the highlight, and never back on for the life of the screen.
+ */
+const stickToBottom = ref(true);
+
+watch(selectedId, (id) => {
+  if (!id) return;
+  if (entryPick.value === '') {
+    entryPick.value = id;
+    return;
+  }
+  if (id !== entryPick.value) stickToBottom.value = false;
+});
+
+/** The newest message's id — the thread's bottom edge. */
+const newestId = computed(() => {
+  const list = displayMessages.value;
+  return list.length ? list[list.length - 1].id : '';
+});
+
+watch(newestId, (id, previous) => {
+  if (!id) return;
+  // The first paint needs no guard; a later change follows only while the
+  // reader is still on the bottom. Deferred past the nav layer's entry
+  // `scrollIntoViewNearest` (which runs in the same tick's microtasks) so
+  // this scroll wins.
+  if (previous && !stickToBottom.value) return;
+  setTimeout(() => {
+    const scroller = document.querySelector('.kai-content');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }, 0);
+});
+
 /** The option sheet over the thread; it owns the D-pad while open. */
 const menuOpen = ref(false);
 /** Two-step delete: the first press asks, the second acts. */

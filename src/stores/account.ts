@@ -22,6 +22,14 @@ export interface ProfileFile {
 export interface AccountProfile {
   background: ProfileFile | null;
   picture: ProfileFile | null;
+  /** The bio text, or '' when the server sent none. */
+  bio: string;
+  /** The account's level, 1 when the server sent none. */
+  level: number;
+  /** Total experience points earned. */
+  experience: number;
+  /** 0..1 progress toward the next level. */
+  levelingProgress: number;
 }
 
 export interface Account {
@@ -32,6 +40,12 @@ export interface Account {
   nick: string | null;
   display: string;
   profile: AccountProfile | null;
+  /** ISO timestamp of account creation, '' when the server sent none. */
+  createdAt: string;
+  /** The account's language code, or '' when the server sent none. */
+  language: string;
+  /** The account's region code, or '' when the server sent none. */
+  region: string;
 }
 
 export const useAccountStore = defineStore('account', () => {
@@ -48,6 +62,12 @@ export const useAccountStore = defineStore('account', () => {
   const waiting = ref(false);
   /** l10n key for the last sign-in failure; '' when the flow is healthy. */
   const errorKey = ref('');
+  /**
+   * l10n key for a note shown on the signed-out screen — why the session
+   * ended (an expired, unrenewable token), distinct from `errorKey` which is
+   * the device flow's own failures. '' when there is nothing to say.
+   */
+  const noticeKey = ref('');
 
   /** Back to the signed-out state, dropping every sign-in trace. */
   function reset(): void {
@@ -58,6 +78,7 @@ export const useAccountStore = defineStore('account', () => {
     verificationUriComplete.value = '';
     waiting.value = false;
     errorKey.value = '';
+    noticeKey.value = '';
   }
 
   return {
@@ -68,6 +89,7 @@ export const useAccountStore = defineStore('account', () => {
     verificationUriComplete,
     waiting,
     errorKey,
+    noticeKey,
     reset,
   };
 });

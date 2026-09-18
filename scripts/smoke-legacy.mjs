@@ -1418,7 +1418,18 @@ const PREAMBLE = `<script>
       return;
     }
     if (url.indexOf('/messager/chat/summary') !== -1) {
-      xhr.respond(CANNED.chatSummary.status, CANNED.chatSummary.body, CANNED.chatSummary.headers);
+      // Once a message has been sent, the room's last message is that send —
+      // the server's summary answers with it, so a return to the room list
+      // shows the sent row (a sticker preview, for instance) rather than the
+      // stale canned row.
+      var summaryBody = window.__lastSent
+        ? (function () {
+            var next = JSON.parse(JSON.stringify(CANNED.chatSummary.body));
+            if (next['room-group']) next['room-group'].last_message = window.__lastSent;
+            return next;
+          })()
+        : CANNED.chatSummary.body;
+      xhr.respond(CANNED.chatSummary.status, summaryBody, CANNED.chatSummary.headers);
       return;
     }
     if (url.indexOf('/messager/chat/invites') !== -1 && url.indexOf('/accept') !== -1) {
@@ -1541,9 +1552,34 @@ const PREAMBLE = `<script>
     }
     // A message react toggles like a post one: odd posts add the reaction
     // (200), even posts take it back (204) — the contract the picker follows.
+    // The room's page also carries the toggle, like the real server's: a
+    // return to the room reloads the newest page, and the merge would let the
+    // canned (reaction-less) row replace the in-memory reacted one.
     if (url.indexOf('/messager/chat/room-group/messages/') !== -1 && url.indexOf('/reactions') !== -1) {
       window.__reactionPosts = (window.__reactionPosts || 0) + 1;
-      xhr.respond(window.__reactionPosts % 2 === 1 ? 200 : 204, {}, '');
+      var reactionAdded = window.__reactionPosts % 2 === 1;
+      var reacted = null;
+      for (var ri = 0; ri < CANNED.chatMessages.body.length; ri += 1) {
+        if (CANNED.chatMessages.body[ri].id === 'msg-2') reacted = CANNED.chatMessages.body[ri];
+      }
+      if (reacted) {
+        try {
+          var reaction = JSON.parse(xhr.requestBody || '{}');
+          var symbol = reaction.symbol || 'wave';
+          reacted.reactions_count = reacted.reactions_count || {};
+          reacted.reactions_made = reacted.reactions_made || {};
+          if (reactionAdded) {
+            reacted.reactions_count[symbol] = (reacted.reactions_count[symbol] || 0) + 1;
+            reacted.reactions_made[symbol] = true;
+          } else {
+            var nextCount = (reacted.reactions_count[symbol] || 0) - 1;
+            if (nextCount > 0) reacted.reactions_count[symbol] = nextCount;
+            else delete reacted.reactions_count[symbol];
+            delete reacted.reactions_made[symbol];
+          }
+        } catch (e) {}
+      }
+      xhr.respond(reactionAdded ? 200 : 204, {}, '');
       return;
     }
     // An edit echoes the message with the new text and an edited_at, which is
@@ -1625,6 +1661,9 @@ const PREAMBLE = `<script>
       // regardless of how fast the gate drives the composer.
       sent.created_at = new Date(Date.now() + 600000 + window.__sentSeq * 10000).toISOString();
       sent.updated_at = sent.created_at;
+      // The server's summary route names the sent message as the room's last
+      // one; capture it so the summary answers like the real deployment would.
+      window.__lastSent = JSON.parse(JSON.stringify(sent));
       xhr.respond(200, sent, '');
       return;
     }
@@ -1726,6 +1765,8 @@ const requests = window.__requests;
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const all = (selector) => Array.prototype.slice.call(document.querySelectorAll(selector));
+/** The push/pop slide keeps the outgoing view in the DOM; wait for it to go. */
+const settled = () => until(() => document.querySelectorAll('.kai-view').length === 1);
 const text = (selector) => {
   const node = document.querySelector(selector);
   return node ? node.textContent.trim() : '';
@@ -1733,27 +1774,19 @@ const text = (selector) => {
 const texts = (selector) => all(selector).map((node) => node.textContent.trim());
 
 /**
- * Turns the event loop until `predicate` holds.
+ * Turns the event loop until `predicate` holds, walking real wall-clock time
+ * in small steps up to `budgetMs`.
  *
  * A load is several asynchronous hops deep — the canned response arrives in a
  * later turn, then the store updates, then Vue's scheduler renders in a
  * microtask — so a fixed number of turns would encode that chain here and break
- * the moment the app grows a hop.
+ * the moment the app grows a hop. The same holds for work paced by real
+ * timers: the option menu defers its select behind a 200ms timer (the sheet's
+ * exit animation), so a wait that only spins quick turns races that timer and
+ * flakes. The predicate is still checked first, so a condition that already
+ * holds returns without paying a step.
  */
-async function until(predicate) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (predicate()) return true;
-    await flush();
-  }
-  return false;
-}
-
-/**
- * Like `until`, but for work paced by real timers — the device-flow poll
- * sleeps whole seconds between exchanges, which `flush()` (a 0ms turn) cannot
- * advance. Walks the clock in small steps up to `budgetMs`.
- */
-async function untilTimer(predicate, budgetMs = 8000) {
+async function until(predicate, budgetMs = 8000) {
   const deadline = Date.now() + budgetMs;
   while (Date.now() < deadline) {
     if (predicate()) return true;
@@ -1766,11 +1799,20 @@ async function untilTimer(predicate, budgetMs = 8000) {
  * Dispatches a hardware key and waits for Vue to patch the DOM. Vue batches
  * renders into a microtask, so asserting straight after `dispatchEvent` reads
  * the previous state.
+ *
+ * A navigation press also runs the screen swap: the push/pop slide keeps the
+ * outgoing view in the DOM until its leave ends, so for the duration of the
+ * slide two `.kai-view`s are present and the direct queries below read the
+ * first (the outgoing one). A press that swaps screens therefore holds until
+ * the swap settles and one view remains.
  */
 async function press(key) {
   const event = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
   document.dispatchEvent(event);
   await flush();
+  if (document.querySelectorAll('.kai-view').length > 1) {
+    await until(() => document.querySelectorAll('.kai-view').length === 1);
+  }
   return event;
 }
 
@@ -1986,9 +2028,15 @@ check(
 );
 
 // Climb out of the grid: one UP per row to reach the first, one more to leave
-// it. The month bar is where that lands.
-for (let row = 0; row < calRow; row += 1) await press('ArrowUp');
-await press('ArrowUp');
+// it. The grid follows the cursor across a month boundary — a row-0 Monday of
+// the target month belongs to the *previous* month's grid, so the cursor
+// re-enters that grid rather than leaving — so the exact press count is not
+// fixed. Walk until the month bar holds the highlight.
+await pressUntil(
+  'ArrowUp',
+  () => Boolean(document.querySelector('.kai-cal__bar .kai-list-item[nav-selected="true"]')),
+  20,
+);
 check(
   'UP out of the grid reaches the month bar',
   Boolean(document.querySelector('.kai-cal__bar .kai-list-item[nav-selected="true"]')),
@@ -3397,7 +3445,7 @@ check(
 );
 
 // The first poll is still pending; the second exchange approves.
-await untilTimer(() => Boolean(document.querySelector('.kai-account__name')));
+await until(() => Boolean(document.querySelector('.kai-account__name')));
 const tokenRequests = requests.filter(
   (request) => request.url.indexOf('/stargate/auth/open/token') !== -1,
 );
@@ -3479,6 +3527,7 @@ await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
 await until(() => document.querySelectorAll('.kai-reaction-tile').length === 15);
+await settled();
 check(
   'the signed-in picker shows the fifteen reaction stickers',
   text('.kai-header__title') === 'action_react' &&
@@ -3592,6 +3641,7 @@ await until(() => text('.kai-header__title') === 'app_title');
 // sync rebuilds the stack and the canned route answers the owned detail.
 window.location.hash = '#/explore/post?id=' + OWNED_POST_ID;
 await until(() => Boolean(document.querySelector('.kai-post-extras[nav-selected="true"]')));
+await settled();
 check(
   "the owned post's picture leads the view",
   text('.kai-header__title') === 'post_title' &&
@@ -3613,6 +3663,7 @@ await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
 await until(() => Boolean(document.querySelector('.kai-field__textarea')));
+await settled();
 check(
   "edit opens the composer seeded with the post's content",
   text('.kai-header__title') === 'compose_edit' &&
@@ -3664,6 +3715,10 @@ await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
+// The sheet slides out before the action lands (KaiOptionMenu defers its
+// select until the exit animation has played), so the armed confirmation
+// shows a beat later.
+await until(() => texts('.kai-option-menu__item').join('|').indexOf('post_delete_confirm') !== -1);
 check(
   'the first press on Delete asks for confirmation',
   texts('.kai-option-menu__item').join('|').indexOf('post_delete_confirm') !== -1,
@@ -4189,7 +4244,10 @@ check(
   texts('.kai-option-menu__item'),
 );
 await press('Backspace');
-await flush();
+// The sheet slides out before the close lands (KaiOptionMenu defers its
+// cancel until the exit animation has played), so the next SoftLeft has to
+// wait for it to actually unmount.
+await until(() => !document.querySelector('.kai-option-menu'));
 
 // Filter: the watch's own scope tabs.
 await press('SoftLeft');
@@ -4266,6 +4324,7 @@ await press('SoftLeft');
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
 await press('Enter');
 await until(() => Boolean(document.querySelector('.kai-field__input--line')));
+await settled();
 check(
   'New message opens an account search whose field starts highlighted',
   text('.kai-header__title') === 'chat_new_message' &&
@@ -5042,6 +5101,7 @@ await press('Enter');
 // thread the sticker went to, which is where the sticker renders below.
 await until(() => Boolean(document.querySelector('.kai-chat')));
 await until(() => Boolean(document.querySelector('.kai-chat-bubble__sticker')));
+await settled();
 const stickerRequest = requests.filter(
   (request) =>
     request.method === 'POST' &&
@@ -5344,6 +5404,10 @@ await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
+// The sheet slides out before the action lands (KaiOptionMenu defers its
+// select until the exit animation has played), so the armed confirmation
+// shows a beat later.
+await until(() => texts('.kai-option-menu__item').join('|').indexOf('chat_delete_confirm') !== -1);
 check(
   'the first delete press asks for confirmation',
   texts('.kai-option-menu__item').join('|').indexOf('chat_delete_confirm') !== -1,
@@ -5673,7 +5737,13 @@ await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
 await until(() => text('.kai-header__title') === 'nav_account');
-await press('ArrowDown');
+// The account screen carries a status section above the identity rows (and
+// its own clear-status confirmation), so the sign-out row is not one
+// ArrowDown away — walk to it rather than hard-coding the row index.
+await pressUntil('ArrowDown', () => {
+  const selected = document.querySelector('[nav-selected="true"]');
+  return Boolean(selected) && selected.textContent.indexOf('account_sign_out') !== -1;
+});
 await press('Enter');
 await until(() => texts('.kai-list-item__primary').join('|') === 'account_sign_in');
 const revokeRequest = requests.filter(

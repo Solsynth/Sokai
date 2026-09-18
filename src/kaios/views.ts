@@ -23,14 +23,25 @@ export const currentView = computed(() => stack.value[stack.value.length - 1]);
 
 export const canGoBack = computed(() => stack.value.length > 1);
 
+/**
+ * The direction the top view last moved, for the view-swap animation in
+ * App.vue: a push slides the new screen in from the right, a pop returns it
+ * the other way. Set synchronously with the stack change so the swap renders
+ * with the right transition. External stack swaps (a bookmarked hash, a manual
+ * edit) keep the previous direction — a cosmetic non-issue, dev-only.
+ */
+export const viewDirection = ref<'push' | 'pop'>('push');
+
 export function push(name: string, params: Record<string, string> = {}): void {
   stack.value.push({ name, params });
+  viewDirection.value = 'push';
   writeStackHash(stack.value);
 }
 
 export function pop(): void {
   if (canGoBack.value) {
     stack.value.pop();
+    viewDirection.value = 'pop';
     writeStackHash(stack.value);
   }
 }
@@ -47,6 +58,7 @@ export function popTo(name: string): void {
     if (stack.value[index].name !== name) continue;
     if (index === stack.value.length - 1) return;
     stack.value = stack.value.slice(0, index + 1);
+    viewDirection.value = 'pop';
     writeStackHash(stack.value);
     return;
   }

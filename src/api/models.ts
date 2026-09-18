@@ -1298,6 +1298,183 @@ export function normalizeStickerPackList(raw: unknown): StickerPack[] {
 }
 
 /**
+ * The account's presence status (`GET /passport/accounts/me/statuses`), as
+ * the Solar Network SDK models it. `type` is the visibility: 0 online, 1
+ * busy, 2 do-not-disturb, 3 invisible.
+ */
+export interface AccountStatus {
+  /** The status row id; '' when the response carries none. */
+  id: string;
+  /** 0 online, 1 busy, 2 do-not-disturb, 3 invisible. */
+  type: number;
+  /** The mood: 0 positive, 1 neutral, 2 negative; null when absent. */
+  attitude: number | null;
+  /** The custom label, or '' when the status has none. */
+  label: string;
+  /** The emoji symbol, or '' when none. */
+  symbol: string;
+  /** True when the account set this status itself (vs an automated one). */
+  isCustomized: boolean;
+  /** Online presence, when the server sent it; null otherwise. */
+  isOnline: boolean | null;
+  /** Epoch ms at which the status auto-clears; 0 when it never does. */
+  clearedAt: number;
+}
+
+/**
+ * Wire → app model for the account's status row. A `cleared_at` timestamp
+ * parses into an epoch (0 when absent or unparseable); the string is trusted
+ * because the server owns it and the picker always sends an ISO string back.
+ */
+export function normalizeAccountStatus(raw: unknown): AccountStatus | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
+  const type = typeof source.type === 'number' ? source.type : 0;
+  const cleared = typeof source.cleared_at === 'string' ? Date.parse(source.cleared_at) : NaN;
+  return {
+    id: typeof source.id === 'string' ? source.id : '',
+    type: type >= 0 && type <= 3 ? type : 0,
+    attitude: typeof source.attitude === 'number' ? source.attitude : null,
+    label: typeof source.label === 'string' ? source.label : '',
+    symbol: typeof source.symbol === 'string' ? source.symbol : '',
+    isCustomized: source.is_customized === true,
+    isOnline: typeof source.is_online === 'boolean' ? source.is_online : null,
+    clearedAt: Number.isNaN(cleared) ? 0 : cleared,
+  };
+}
+
+/* --- Check-in & fortune --------------------------------------------------- */
+
+/**
+ * One row of a check-in result's tips list. Mirrors `SnFortuneTip`: the
+ * positive/negative flag drives the icon, `title` is also the row's identity.
+ */
+export interface FortuneTip {
+  isPositive: boolean;
+  title: string;
+  content: string;
+}
+
+/**
+ * The detailed fortune report attached to a check-in (`GET
+ * /passport/accounts/me/check-in?version=2`), as the Solar Network SDK models
+ * it. Only `poem`/`summary` are guaranteed to be non-empty on all levels; the
+ * per-area fields may be empty strings.
+ */
+export interface FortuneReport {
+  version: number;
+  poem: string;
+  summary: string;
+  /** The long-form summary, or null when the server sent none. */
+  summaryDetail: string | null;
+  wish: string;
+  love: string;
+  study: string;
+  career: string;
+  health: string;
+  lostItem: string;
+  luckyColor: string;
+  luckyDirection: string;
+  luckyTime: string;
+  luckyItem: string;
+  luckyAction: string;
+  avoidAction: string;
+  ritual: string;
+}
+
+/**
+ * Today's check-in result (`GET/POST /passport/accounts/me/check-in?version=2`).
+ * `null` (404) means not yet checked in — the same signal the watch client
+ * reads. `level` is the day's rank: 0 worst … 4 best, 5 a birthday.
+ */
+export interface CheckInResult {
+  id: string;
+  level: number;
+  tips: FortuneTip[];
+  /** The day's fortune report; null while the AI is still writing it. */
+  fortuneReport: FortuneReport | null;
+  accountId: string;
+  /** Epoch ms of the check-in; 0 when the wire sent none. */
+  createdAt: number;
+}
+
+/** A daily fortune saying (`GET /passport/fortune/daily`), advisory only. */
+export interface FortuneSaying {
+  content: string;
+  source: string;
+  language: string;
+}
+
+function normalizeFortuneTip(raw: unknown): FortuneTip | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
+  return {
+    isPositive: source.is_positive === true,
+    title: typeof source.title === 'string' ? source.title : '',
+    content: typeof source.content === 'string' ? source.content : '',
+  };
+}
+
+/** `null` when `raw` is not a report; every string field falls back to ''. */
+export function normalizeFortuneReport(raw: unknown): FortuneReport | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
+  const string = (field: string): string => (typeof source[field] === 'string' ? (source[field] as string) : '');
+  return {
+    version: typeof source.version === 'number' ? source.version : 0,
+    poem: string('poem'),
+    summary: string('summary'),
+    summaryDetail: typeof source.summary_detail === 'string' ? source.summary_detail : null,
+    wish: string('wish'),
+    love: string('love'),
+    study: string('study'),
+    career: string('career'),
+    health: string('health'),
+    lostItem: string('lost_item'),
+    luckyColor: string('lucky_color'),
+    luckyDirection: string('lucky_direction'),
+    luckyTime: string('lucky_time'),
+    luckyItem: string('lucky_item'),
+    luckyAction: string('lucky_action'),
+    avoidAction: string('avoid_action'),
+    ritual: string('ritual'),
+  };
+}
+
+/** `null` when `raw` is not a check-in result, so callers can filter. */
+export function normalizeCheckInResult(raw: unknown): CheckInResult | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
+  const tips: FortuneTip[] = [];
+  if (Array.isArray(source.tips)) {
+    for (const row of source.tips) {
+      const tip = normalizeFortuneTip(row);
+      if (tip && tip.title) tips.push(tip);
+    }
+  }
+  const createdAt = typeof source.created_at === 'string' ? Date.parse(source.created_at) : NaN;
+  return {
+    id: typeof source.id === 'string' ? source.id : '',
+    level: typeof source.level === 'number' ? source.level : 0,
+    tips,
+    fortuneReport: normalizeFortuneReport(source.fortune_report),
+    accountId: typeof source.account_id === 'string' ? source.account_id : '',
+    createdAt: Number.isNaN(createdAt) ? 0 : createdAt,
+  };
+}
+
+/** `null` when `raw` is not a fortune saying, so callers can filter. */
+export function normalizeFortuneSaying(raw: unknown): FortuneSaying | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as RawRecord;
+  return {
+    content: typeof source.content === 'string' ? source.content : '',
+    source: typeof source.source === 'string' ? source.source : '',
+    language: typeof source.language === 'string' ? source.language : '',
+  };
+}
+
+/**
  * The sticker a message carries, or '' when it carries none: a sticker
  * message's whole content is `:prefix+slug:` (the rule both other clients
  * match, Flutter's `^:([-\w]*\+[-\w]*):$`). `-` and `_` are allowed in either

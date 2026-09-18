@@ -1,32 +1,50 @@
 <template>
-  <div class="kai-scrim" @click="emit('cancel')">
-    <section class="kai-option-menu" @click.stop>
-      <header class="kai-option-menu__header">{{ title }}</header>
+  <!-- The sheet is an app-level overlay, so it mounts outside the current
+       view: the view's enter slide animates a transform, which would make the
+       view the containing block for the scrim's `position: fixed` and leave
+       the screen's softkey bar uncovered below the sheet. On `body` the scrim
+       spans the whole viewport — backdrop and sheet stack over the softkey
+       bar, and the sheet's own bar replaces it. -->
+  <Teleport to="body">
+    <div class="kai-scrim" @click="close(() => emit('cancel'))">
+      <section
+        class="kai-option-menu"
+        :class="{ 'kai-option-menu--closing': closing }"
+        @click.stop
+      >
+        <header class="kai-option-menu__header">{{ title }}</header>
 
-      <div class="kai-option-menu__list">
-        <button
-          v-for="(option, index) in options"
-          :key="option.id"
-          type="button"
-          class="kai-option-menu__item"
-          :class="{ 'kai-option-menu__item--selected': index === cursor }"
-          @click.stop="emit('select', option.id)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
+        <div class="kai-option-menu__list">
+          <button
+            v-for="(option, index) in options"
+            :key="option.id"
+            type="button"
+            class="kai-option-menu__item"
+            :class="{ 'kai-option-menu__item--selected': index === cursor }"
+            @click.stop="close(() => emit('select', option.id))"
+          >
+            {{ option.label }}
+          </button>
+        </div>
 
-      <footer class="kai-option-menu__softkey">
-        <span class="kai-option-menu__key kai-option-menu__key--left" @click="emit('cancel')">
-          {{ cancelLabel }}
-        </span>
-        <span class="kai-option-menu__key kai-option-menu__key--center" @click="selectCurrent">
-          {{ selectLabel }}
-        </span>
-        <span class="kai-option-menu__key kai-option-menu__key--right"></span>
-      </footer>
-    </section>
-  </div>
+        <footer class="kai-option-menu__softkey">
+          <span
+            class="kai-option-menu__key kai-option-menu__key--left"
+            @click="close(() => emit('cancel'))"
+          >
+            {{ cancelLabel }}
+          </span>
+          <span
+            class="kai-option-menu__key kai-option-menu__key--center"
+            @click="close(selectCurrent)"
+          >
+            {{ selectLabel }}
+          </span>
+          <span class="kai-option-menu__key kai-option-menu__key--right"></span>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -76,6 +94,35 @@ const cursor = ref(0);
 const selectLabel = props.selectLabel || t('action_select');
 const cancelLabel = props.cancelLabel || t('action_cancel');
 
+/**
+ * Length of the sheet's slide-out in ms. Must stay in sync with the 0.2s
+ * animation durations on `.kai-scrim` / `.kai-option-menu` in kaios.css, so
+ * the parent sees the close event after the sheet has slid away, not while
+ * it is still half-visible.
+ */
+const CLOSE_MS = 200;
+
+/** True while the slide-out plays; the sheet ignores all input until unmount. */
+const closing = ref(false);
+
+/**
+ * Closes the sheet. Every close path — scrim tap, softkey tap, D-pad — runs
+ * through here: the exit animation plays first (the parent only unmounts us
+ * once the deferred action fires), so the sheet slides down instead of
+ * disappearing instantly. `closing` is cleared once the action has run, so a
+ * press that the parent *keeps the sheet open* for (the two-step delete's
+ * first press only arms the confirmation) leaves the sheet usable rather than
+ * wedged mid-animation; a press that closes it simply unmounts us.
+ */
+function close(action?: () => void): void {
+  if (closing.value) return;
+  closing.value = true;
+  window.setTimeout(() => {
+    closing.value = false;
+    action?.();
+  }, CLOSE_MS);
+}
+
 function move(delta: number): void {
   const count = props.options.length;
   if (!count) return;
@@ -89,14 +136,15 @@ function selectCurrent(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (closing.value) return;
   if (event.key === KEY.UP) {
     move(-1);
   } else if (event.key === KEY.DOWN) {
     move(1);
   } else if (event.key === KEY.CENTER) {
-    selectCurrent();
+    close(selectCurrent);
   } else if (event.key === KEY.SOFT_LEFT || event.key === KEY.BACK) {
-    emit('cancel');
+    close(() => emit('cancel'));
   } else if (event.key === KEY.SOFT_RIGHT) {
     return;
   } else {

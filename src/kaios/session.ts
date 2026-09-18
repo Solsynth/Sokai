@@ -1,6 +1,6 @@
 import { API_BASE_URL, authedRequest } from '~/src/api/solian.js';
 import { request } from '~/src/kaios/xhr.js';
-import { useAccountStore, type Account, type AccountProfile } from '~/src/stores/account.js';
+import { useAccountStore, type Account, type ProfileFile } from '~/src/stores/account.js';
 
 /**
  * The OAuth 2.0 device authorization flow (RFC 8628), mirroring the
@@ -28,9 +28,11 @@ import { useAccountStore, type Account, type AccountProfile } from '~/src/stores
  * private mode) the app simply runs anonymous.
  *
  * `bearerToken()` is the refresh seam: every API call awaits it, so a token
- * near expiry is refreshed lazily, and an `invalid_grant` from the refresh
- * (revoked/expired server-side) drops the session back to anonymous rather
- * than leaving a half-authenticated app.
+ * near expiry is refreshed lazily. A session that can no longer be renewed —
+ * an `invalid_grant` refresh (revoked/expired server-side), or an access token
+ * that ran out with no refresh token behind it — is dropped back to anonymous
+ * with the sign-in screen explaining that the session expired, rather than
+ * leaving a half-authenticated app that 401s on every call.
  *
  * Everything the views read lives in the Pinia account store
  * (`~/src/stores/account.ts`); this module keeps the tokens and the flow
@@ -161,9 +163,14 @@ function clearStoredSession(): void {
  * lazily when the cached one is near expiry. `null` when anonymous — the API
  * calls are then simply unauthenticated.
  *
- * A refresh rejected as `invalid_grant` means the session is dead server-side:
- * it is dropped and `null` returned. Any other refresh failure is transient, so
- * the cached token is sent anyway and the request surfaces the outcome itself.
+ * A session that can no longer be renewed is dropped and `null` returned:
+ * the refresh was rejected as `invalid_grant` (revoked/expired server-side),
+ * or the refresh token is gone while the access token has run out — nothing
+ * could revive it, and a "signed-in" app whose every call is refused is worse
+ * than the sign-in screen. The account store's `noticeKey` then explains why
+ * on that screen. Any *transient* refresh failure leaves the cached token in
+ * place, so the request that needed it still goes out and reports its own
+ * outcome.
  *
  * `forceRefresh` mints a new token even when the stored one still looks live.
  * Only the refused request can discover a session the server has stopped
@@ -172,7 +179,14 @@ function clearStoredSession(): void {
 export async function bearerToken(forceRefresh = false): Promise<string | null> {
   if (!accessToken) return null;
   if (!forceRefresh && expiresAt - Date.now() > REFRESH_BEFORE_MS) return accessToken;
-  if (!refreshToken) return accessToken;
+  // The live-token case above already returned; reaching this branch with no
+  // refresh token means the access token is near (or past) expiry with no way
+  // to renew it — holding onto the session would only hand every call a dead
+  // bearer. End it cleanly, with the sign-in screen explaining what happened.
+  if (!refreshToken) {
+    expireSession();
+    return null;
+  }
 
   await refreshOnce();
   return accessToken;
@@ -200,7 +214,7 @@ async function refreshOnce(): Promise<void> {
 }
 
 /**
- * The exchange itself: installs the new pair, or drops a session the server has
+ * The exchange itself: installs the new pair, or ends a session the server has
  * rejected. A transient failure leaves the cached token in place, so the
  * request that needed it still goes out and reports its own outcome.
  */
@@ -210,7 +224,7 @@ async function exchangeRefresh(): Promise<void> {
   try {
     storePair(await refresh(token));
   } catch (error) {
-    if (error && (error as FlowError).error === 'invalid_grant') dropSession();
+    if (error && (error as FlowError).error === 'invalid_grant') expireSession();
   }
 }
 
@@ -232,6 +246,20 @@ function dropSession(): void {
   clearStoredSession();
 }
 
+/**
+ * Drops a session that can never work again — the server rejected its refresh
+ * (`invalid_grant`: revoked or expired) or its refresh token is gone while the
+ * access token ran out. Unlike `dropSession`, the signed-out screen is told
+ * *why*, so a token that died while the app was closed lands on an explanation
+ * ("Your session expired. Sign in again.") instead of a silent flip to the
+ * anonymous screen.
+ */
+function expireSession(): void {
+  const account = useAccountStore();
+  dropSession();
+  account.noticeKey = 'account_session_expired';
+}
+
 // ---- Device flow -----------------------------------------------------------
 
 /**
@@ -247,6 +275,7 @@ export async function startSignIn(): Promise<void> {
   account.phase = 'signing-in';
   account.waiting = false;
   account.errorKey = '';
+  account.noticeKey = '';
   account.userCode = '';
   account.verificationUri = '';
   account.verificationUriComplete = '';
@@ -461,14 +490,66 @@ function normalizeAccount(raw: unknown): Account | null {
   if (!source || typeof source !== 'object' || typeof source.id !== 'string') return null;
   const name = typeof source.name === 'string' ? source.name : '';
   const nick = typeof source.nick === 'string' ? source.nick : '';
+
+  // The banner and picture are optional: keep whatever profile object the
+  // server sent (`null` when there is none — the signed-in screen guards on
+  // it). The richer fields read the wire's snake_case names with the app's
+  // camelCase as a fallback, so a stored account re-shaping itself still
+  // parses.
+  let background: ProfileFile | null = null;
+  let picture: ProfileFile | null = null;
+  let bio = '';
+  let level = 1;
+  let experience = 0;
+  let levelingProgress = 0;
+  const profileSource =
+    source.profile && typeof source.profile === 'object' ? (source.profile as Record<string, unknown>) : null;
+  if (profileSource) {
+    const rawBackground =
+      profileSource.background && typeof profileSource.background === 'object'
+        ? (profileSource.background as Record<string, unknown>)
+        : null;
+    if (rawBackground && typeof rawBackground.id === 'string') background = { id: rawBackground.id };
+    const rawPicture =
+      profileSource.picture && typeof profileSource.picture === 'object'
+        ? (profileSource.picture as Record<string, unknown>)
+        : null;
+    if (rawPicture && typeof rawPicture.id === 'string') picture = { id: rawPicture.id };
+    bio = typeof profileSource.bio === 'string' ? profileSource.bio : '';
+    level =
+      typeof profileSource.level === 'number' && profileSource.level > 0
+        ? profileSource.level
+        : 1;
+    experience = typeof profileSource.experience === 'number' ? profileSource.experience : 0;
+    const progress = profileSource.leveling_progress ?? profileSource.levelingProgress;
+    levelingProgress = typeof progress === 'number' ? Math.min(1, Math.max(0, progress)) : 0;
+  }
+
+  const createdAt =
+    typeof source.created_at === 'string'
+      ? source.created_at
+      : typeof source.createdAt === 'string'
+        ? source.createdAt
+        : '';
+
   return {
     id: source.id,
     name: name,
     nick: nick,
     display: nick || name,
-    // The banner is optional: keep whatever profile object the server sent
-    // (`null` when there is none — the signed-in screen guards on it).
     profile:
-      source.profile && typeof source.profile === 'object' ? (source.profile as AccountProfile) : null,
+      profileSource === null
+        ? null
+        : {
+            background,
+            picture,
+            bio,
+            level,
+            experience,
+            levelingProgress,
+          },
+    createdAt,
+    language: typeof source.language === 'string' ? source.language : '',
+    region: typeof source.region === 'string' ? source.region : '',
   };
 }

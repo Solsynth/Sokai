@@ -41,6 +41,16 @@ html {
   --kai-softkey-height: 3rem;
   --kai-row-height: 4rem;
 
+  /* Option-menu slide-in/out length. Keep in sync with `CLOSE_MS` in
+     KaiOptionMenu.vue — the exit event must fire after the sheet has slid
+     away. Transform/opacity only, no blur: cheap on low-end hardware. */
+  --kai-sheet-ms: 0.2s;
+
+  /* Screen-swap slide length (App.vue's view transition). Shorter than the
+     sheet's: a swap runs twice (leave then enter), so the whole navigation
+     stays quick on a low-end handset. Transform-only, like the sheet. */
+  --kai-view-ms: 0.18s;
+
   /*
    * Palette — the calm "dawn light" re-theme. Cool grey-violet base (the sky
    * before the sun is up), soft near-black ink, and a slate-indigo accent
@@ -119,14 +129,21 @@ body {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  /* The swap's leaving view positions against the app, so it can overlay the
+     view slot without covering the softkey bar. */
+  position: relative;
 }
 
-/* A screen = header + scrolling content + softkey bar. */
+/* A screen = header + scrolling content + softkey bar. The page is opaque:
+   during a swap the outgoing view slides off while the incoming one slides
+   over it, so a transparent page would show the one underneath through
+   itself — a double image that reads as shaking. */
 .kai-view {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  background: var(--kai-color-bg);
 }
 
 /*
@@ -1516,6 +1533,49 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   line-height: 1;
 }
 
+/* The status line is a presence dot beside the status text — the dot turns
+   accent-green when the server reports the account online. */
+.kai-account__status-line {
+  display: flex;
+  align-items: center;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.kai-account__status-dot {
+  flex-shrink: 0;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.6rem;
+  border-radius: 50%;
+  background: var(--kai-color-text-muted);
+}
+
+.kai-account__status-dot--online {
+  background: #2f9e44;
+}
+
+.kai-account__status-text {
+  min-width: 0;
+  flex: 1;
+}
+
+/* The level progress bar: a quiet track with an accent fill. Widths are set
+   inline from the server's 0..1 progress. */
+.kai-progress {
+  width: 100%;
+  height: 0.8rem;
+  margin: 0.4rem 0;
+  border-radius: 0.4rem;
+  background: var(--kai-color-border);
+  overflow: hidden;
+}
+
+.kai-progress__fill {
+  height: 100%;
+  border-radius: 0.4rem;
+  background: var(--kai-color-accent);
+}
+
 /* --- Reaction picker -------------------------------------------------- */
 
 /* The 5×3 grid of reaction stickers. One selectable owns the grid and the
@@ -1593,7 +1653,12 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 /* The design guide's Option Menu: a self-contained sheet over the current
    view, so an action runs without leaving it. The scrim dims what is
    underneath; the sheet carries its own title bar, list and softkey bar —
-   the same chrome a screen has, anchored to the bottom. */
+   the same chrome a screen has, anchored to the bottom. Both layers are
+   teleported onto `body`, so they stack over the screen's softkey bar too
+   (a view's enter slide would otherwise become the scrim's containing block
+   and leave the bar uncovered). The backdrop appears outright — no opacity
+   animation, which is one less compositing pass on a low-end device — and
+   the sheet itself slides. Plain rgba/transform: no blur, no filters. */
 .kai-scrim {
   position: fixed;
   top: 0;
@@ -1604,12 +1669,33 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   z-index: 10;
 }
 
+/* The sheet slides up over the dimmed view on mount; while `--closing` is
+   set (KaiOptionMenu defers its close event until the animation ends), it
+   plays the reverse. The scrim stays put: a snap-on backdrop reads fine and
+   skips a fade on hardware that is already filling the frame. */
 .kai-option-menu {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   background: var(--kai-color-bg);
+  animation: kai-sheet-in var(--kai-sheet-ms) ease-out;
+}
+
+.kai-option-menu--closing {
+  animation: kai-sheet-out var(--kai-sheet-ms) ease-out forwards;
+}
+
+@keyframes kai-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes kai-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
 }
 
 /* The sheet's title bar, mirroring the header's look so the sheet reads as
@@ -1685,6 +1771,90 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   padding-left: 0.5rem;
 }
 
+/* --- View swap ----------------------------------------------------------- */
+
+/* A screen swap is a real push: the outgoing view slides left (30%) while
+   the incoming one slides in from the right over it, so both pages are on
+   screen together for the slide — a pop runs the same motion in reverse (the
+   top view slides right off, the one beneath slides in from the left). Vue
+   runs the leave and the enter at once, so nothing waits on either; the swap
+   is complete when the leaving view's slide ends and it is removed.
+
+   The poses live on Vue's `-from`/`-to` classes and the motion on a plain
+   `transform` transition: Vue applies the `-from` pose, forces a frame, then
+   swaps to `-to` and the transition runs between them. (A keyframe
+   `animation` on the `-active` class is not held: Vue strips the `-from`
+   class a frame in and the compositor can skip the from-pose, so the new
+   page appears without sliding and the outgoing one jumps away — a shake.)
+   Plain transforms, as cheap as the option sheet's slide; no blur, no
+   filters. */
+.view-push-enter-from {
+  transform: translateX(100%);
+}
+
+.view-push-enter-to {
+  transform: translateX(0);
+}
+
+.view-push-enter-active {
+  transition: transform var(--kai-view-ms) ease-out;
+  /* The entering view holds the layout while the swap runs; it must paint
+     above the leaving one. */
+  position: relative;
+  z-index: 1;
+}
+
+.view-push-leave-from {
+  transform: translateX(0);
+}
+
+.view-push-leave-to {
+  transform: translateX(-30%);
+}
+
+.view-push-leave-active {
+  transition: transform var(--kai-view-ms) ease-out;
+  /* Two flex children would split the app's height in half, so the page
+     visibly jumps mid-swap. The leaving view steps out of flow and overlays
+     the view slot (above the softkey bar) instead. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--kai-softkey-height);
+}
+
+.view-pop-enter-from {
+  transform: translateX(-30%);
+}
+
+.view-pop-enter-to {
+  transform: translateX(0);
+}
+
+.view-pop-enter-active {
+  transition: transform var(--kai-view-ms) ease-out;
+  position: relative;
+  z-index: 1;
+}
+
+.view-pop-leave-from {
+  transform: translateX(0);
+}
+
+.view-pop-leave-to {
+  transform: translateX(100%);
+}
+
+.view-pop-leave-active {
+  transition: transform var(--kai-view-ms) ease-out;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--kai-softkey-height);
+}
+
 /* --- Compose media toolbar ---------------------------------------------- */
 
 /* The capture-source row: one icon button per source (camera, recorder,
@@ -1753,25 +1923,27 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   display: flex;
   flex-direction: column;
   list-style: none;
-  margin: var(--kai-gutter) 0;
+  margin: 0.4rem 0;
   padding: 0;
 }
 
 /* One message. Others' bubbles sit on the left with the sender above; your own
    sit on the right with the accent background — the two-sided conversation
-   shape the design guide's messaging pattern describes. */
+   shape the design guide's messaging pattern describes. The metrics are the
+   compact end of the guide: a thread is many bubbles on a small screen, so the
+   air between them is what the vertical budget saves. */
 .kai-chat-bubble {
   display: flex;
   flex-direction: column;
   max-width: 85%;
-  margin: 0 0 0.8rem;
+  margin: 0 0 0.4rem;
   /* The ring is the bubble's own border, so it follows the bubble's radius: an
      `outline` on Gecko 48 is a rectangle, which drew a box over the rounded
      bubble. It is always there and always transparent, so selecting one cannot
      resize the message, and the padding gives back exactly what the border
      takes — the text sits where it did before there was a border at all. */
   border: 0.2rem solid transparent;
-  padding: 0.4rem 0.6rem;
+  padding: 0.3rem 0.5rem;
   border-radius: var(--kai-radius);
   background: var(--kai-color-surface);
   box-shadow: 0 0.2rem 0.6rem 0 rgba(0, 0, 0, 0.14);
@@ -1800,7 +1972,7 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 .kai-chat-bubble__head {
   display: flex;
   align-items: center;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.2rem;
 }
 
 .kai-chat-bubble--own .kai-chat-bubble__head {
@@ -1839,7 +2011,7 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.3rem;
   padding: 0.3rem 0.5rem;
   border-left: 0.2rem solid var(--kai-color-text-muted);
   border-radius: 0 0.3rem 0.3rem 0;
@@ -1867,7 +2039,7 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 /* The reactions a message drew; the pills keep their own colours, so the row
    needs nothing but a little air between it and the meta line. */
 .kai-chat-bubble .kai-reactions {
-  margin-top: 0.4rem;
+  margin-top: 0.3rem;
 }
 
 .kai-chat-bubble__content {
@@ -1897,7 +2069,7 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 }
 
 .kai-chat-bubble .kai-post__attach {
-  margin-top: 0.4rem;
+  margin-top: 0.3rem;
 }
 
 /* The accent bubble carries its own text colour, and the attachment line would
@@ -1909,7 +2081,7 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 
 .kai-chat-bubble__meta {
   display: flex;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   color: var(--kai-color-text-muted);
   font-size: var(--kai-fs-p-thi);
 }
