@@ -104,7 +104,7 @@
           <KaiListItem
             :primary="t('check_in_title')"
             :secondary="t('check_in_entry_hint')"
-            @select="push('check-in')"
+            @select="openCheckIn"
           />
           <KaiListItem
             :primary="t(status && status.isCustomized ? 'account_edit_status' : 'account_set_status')"
@@ -169,7 +169,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { type AccountStatus } from '~/src/api/models.js';
+import { todayKey, type AccountStatus } from '~/src/api/models.js';
 import { fetchAccountStatus, clearAccountStatus, fileUrl } from '~/src/api/solian.js';
 import KaiHeader from '~/src/components/KaiHeader.vue';
 import KaiList from '~/src/components/KaiList.vue';
@@ -260,6 +260,12 @@ async function loadStatus(): Promise<void> {
   } finally {
     statusLoading.value = false;
   }
+}
+
+/** The check-in lives in the calendar now: open it on today, where the day's
+ *  ritual shows. */
+function openCheckIn(): void {
+  push('calendar', { date: todayKey() });
 }
 
 /** Opens the status composer with the current status as the seed. */

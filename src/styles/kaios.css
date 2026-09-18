@@ -379,6 +379,12 @@ body {
   border-color: var(--kai-color-on-accent);
 }
 
+/* The check-in's rank is the one headline the day's section carries; the rest
+   of the ritual keeps the screen's own muted text rhythm. */
+.kai-cal__level {
+  font-weight: var(--kai-fw-semibold);
+}
+
 /* The agenda's rows reuse the list row; the time is the row's second line. */
 .kai-cal__when {
   display: block;

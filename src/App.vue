@@ -32,7 +32,6 @@ import ChatRoomView from '~/src/views/ChatRoomView.vue';
 import ChatSearchView from '~/src/views/ChatSearchView.vue';
 import ChatStickersView from '~/src/views/ChatStickersView.vue';
 import ChatView from '~/src/views/ChatView.vue';
-import CheckInView from '~/src/views/CheckInView.vue';
 import ComposeView from '~/src/views/ComposeView.vue';
 import DashboardView from '~/src/views/DashboardView.vue';
 import ExploreView from '~/src/views/ExploreView.vue';
@@ -64,7 +63,6 @@ const VIEWS: Record<string, Component> = {
   'chat-stickers': ChatStickersView,
   account: AccountView,
   'status-edit': StatusEditView,
-  'check-in': CheckInView,
   about: AboutView,
 };
 
