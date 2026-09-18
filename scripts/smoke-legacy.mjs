@@ -5277,10 +5277,10 @@ check(
 openSheet();
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
 check(
-  "the highlighted message's sheet offers reply, react, edit, delete and refresh",
+  "the highlighted message's sheet offers info, reply, react, edit, delete and refresh",
   text('.kai-option-menu__header') === 'chat_options' &&
     texts('.kai-option-menu__item').join('|') ===
-      'action_reply|action_react|chat_edit|chat_delete|action_reload',
+      'chat_info|action_reply|action_react|chat_edit|chat_delete|action_reload',
   {
     header: text('.kai-option-menu__header'),
     items: texts('.kai-option-menu__item').join('|'),
@@ -5295,11 +5295,63 @@ check(
   { menu: Boolean(document.querySelector('.kai-option-menu')) },
 );
 
-// Reply opens the composer anchored on the message; the send carries
-// replied_message_id and the sent bubble quotes what it answers.
+// Message info opens the verbose page: the sheet's first action. It names the
+// full sender (@handle), the exact sent instant, the delivery state, the ids
+// and the room. The expected timestamp is derived from the canned row's own
+// instant, so seconds never race the fixture.
 await walkToMessage('Nice, thanks!');
 openSheet();
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('Enter');
+await until(() => text('.kai-header__title') === 'chat_info');
+const expectedSent = (() => {
+  const iso = CANNED.chatMessages.body.find((row) => row.id === 'msg-2').created_at;
+  const at = new Date(Date.parse(iso));
+  const pad = (n) => (n < 10 ? '0' + n : '' + n);
+  return (
+    at.getFullYear() + '-' + pad(at.getMonth() + 1) + '-' + pad(at.getDate()) +
+    ' ' + pad(at.getHours()) + ':' + pad(at.getMinutes()) + ':' + pad(at.getSeconds())
+  );
+})();
+check(
+  'Message info opens a full page: sender, exact time, state, ids and room',
+  (() => {
+    const values = texts('.kai-chat-info__value');
+    return (
+      text('.kai-header__title') === 'chat_info' &&
+      text('.kai-chat-info__name') === 'Test User' &&
+      text('.kai-chat-info__handle') === '@testuser' &&
+      values[0] === expectedSent &&
+      values[1] === 'chat_sent' &&
+      values[2] === 'text' &&
+      values[4] === 'msg-2' &&
+      values[values.length - 1] === 'SN Notes'
+    );
+  })(),
+  {
+    header: text('.kai-header__title'),
+    name: text('.kai-chat-info__name'),
+    handle: text('.kai-chat-info__handle'),
+    expectedSent,
+    values: texts('.kai-chat-info__value'),
+  },
+);
+await press('Backspace');
+await until(() => Boolean(document.querySelector('.kai-chat')));
+check(
+  'Back returns from the message info page to the thread',
+  Boolean(document.querySelector('.kai-chat')) &&
+    text('.kai-softkey__key--right') === 'action_options',
+  { right: text('.kai-softkey__key--right') },
+);
+
+// Reply opens the composer anchored on the message; the send carries
+// replied_message_id and the sent bubble quotes what it answers. (Message info
+// is the sheet's first item, so Reply is one DOWN.)
+await walkToMessage('Nice, thanks!');
+openSheet();
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
 await press('Enter');
 await until(() => Boolean(document.querySelector('.kai-field__textarea')));
 check(
@@ -5339,6 +5391,7 @@ await walkToMessage('Nice, thanks!');
 openSheet();
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
 await press('ArrowDown');
+await press('ArrowDown');
 await press('Enter');
 await until(() => text('.kai-header__title') === 'action_react');
 check(
@@ -5371,6 +5424,7 @@ check(
 await walkToMessage('Nice, thanks!');
 openSheet();
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
 await press('Enter');
@@ -5427,6 +5481,7 @@ check(
 await walkToMessage('Thanks, now edited!');
 openSheet();
 await until(() => Boolean(document.querySelector('.kai-option-menu')));
+await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');

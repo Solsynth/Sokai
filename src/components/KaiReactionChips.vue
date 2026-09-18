@@ -15,9 +15,9 @@ import { t } from '~/src/kaios/l10n.js';
 
 /**
  * A post's reactions as sticker pills — the bundled sticker and its count,
- * best first, capped at `limit`. Mirrors the watch app's post-card pills
- * (`reactionPills`); custom `prefix+slug` reactions have no bundled sticker
- * and stay with the plain count text.
+ * best first, capped at `limit` (`0` renders every reaction). Mirrors the
+ * watch app's post-card pills (`reactionPills`); custom `prefix+slug`
+ * reactions have no bundled sticker and stay with the plain count text.
  */
 const props = withDefaults(
   defineProps<{

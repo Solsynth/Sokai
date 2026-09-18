@@ -298,11 +298,15 @@ const isOwned = computed(
     selectedMessage.value?.senderId === selfAccountId.value,
 );
 
-/** The actions the sheet can run, in the design guide's read-then-write order. */
+/** The actions the sheet can run, in the design guide's read-then-write order:
+ *  the read actions (info, reply, react) first, then the writes, then refresh. */
 const menuOptions = computed<Option[]>(() => {
   const message = selectedMessage.value;
   if (!message) return [];
-  const options: Option[] = [{ id: 'reply', label: t('action_reply') }];
+  const options: Option[] = [
+    { id: 'info', label: t('chat_info') },
+    { id: 'reply', label: t('action_reply') },
+  ];
   if (message.status !== 'pending') options.push({ id: 'react', label: t('action_react') });
   if (isOwned.value) {
     options.push({ id: 'edit', label: t('chat_edit') });
@@ -316,7 +320,13 @@ const menuOptions = computed<Option[]>(() => {
 });
 
 function onMenuSelect(id: string): void {
-  if (id === 'reply') {
+  if (id === 'info') {
+    // The verbose page reads the row back from the loaded thread, so it only
+    // needs the room and the id the sheet was open on.
+    menuOpen.value = false;
+    const message = selectedMessage.value;
+    if (message) push('chat-info', { room: roomId.value, id: message.id });
+  } else if (id === 'reply') {
     menuOpen.value = false;
     openReply();
   } else if (id === 'react') {

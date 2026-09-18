@@ -1509,3 +1509,23 @@ export function formatRelativeTime(
 
   return { text: iso.slice(0, 10) };
 }
+
+/**
+ * A wire instant as a full local reading — `YYYY-MM-DD HH:MM:SS` — the detail
+ * a relative time cannot carry. Locale-neutral on purpose, like the calendar's
+ * dates. '' when the instant cannot be read.
+ */
+export function formatDateTime(iso: string | null): string {
+  if (typeof iso !== 'string' || !iso) return '';
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return '';
+  const time = new Date(at);
+  return (
+    time.getFullYear() +
+    '-' + pad2(time.getMonth() + 1) +
+    '-' + pad2(time.getDate()) +
+    ' ' + pad2(time.getHours()) +
+    ':' + pad2(time.getMinutes()) +
+    ':' + pad2(time.getSeconds())
+  );
+}

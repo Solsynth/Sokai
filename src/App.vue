@@ -26,6 +26,7 @@ import AboutView from '~/src/views/AboutView.vue';
 import AccountView from '~/src/views/AccountView.vue';
 import CalendarView from '~/src/views/CalendarView.vue';
 import ChatComposeView from '~/src/views/ChatComposeView.vue';
+import ChatInfoView from '~/src/views/ChatInfoView.vue';
 import ChatInvitesView from '~/src/views/ChatInvitesView.vue';
 import ChatNewView from '~/src/views/ChatNewView.vue';
 import ChatRoomView from '~/src/views/ChatRoomView.vue';
@@ -57,6 +58,7 @@ const VIEWS: Record<string, Component> = {
   chat: ChatView,
   'chat-room': ChatRoomView,
   'chat-compose': ChatComposeView,
+  'chat-info': ChatInfoView,
   'chat-new': ChatNewView,
   'chat-invites': ChatInvitesView,
   'chat-search': ChatSearchView,

@@ -2128,6 +2128,80 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   margin-right: 0.6rem;
 }
 
+/* --- Chat message info ---------------------------------------------------
+   The verbose detail page: the sender, the message, and a page of facts, read
+   top to bottom like About — no D-pad stops, the arrows scroll the content. */
+
+/* The sender block, the identity pattern the account screen uses: the face
+   beside the name, with the unique handle under it. */
+.kai-chat-info__sender {
+  display: flex;
+  align-items: center;
+}
+
+.kai-chat-info__pfp {
+  flex-shrink: 0;
+  margin-right: 0.8rem;
+}
+
+.kai-chat-info__who {
+  min-width: 0;
+}
+
+.kai-chat-info__name {
+  margin: 0;
+  font-size: var(--kai-fs-p-pri);
+  font-weight: 600;
+}
+
+.kai-chat-info__handle {
+  margin: 0.2rem 0 0;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+/* The message's own body, wrapped like the bubble's text. A sticker is the
+   message, so its placeholder caption reads muted beneath the picture; a voice
+   note or an empty body reads muted too. */
+.kai-chat-info__body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kai-chat-info__body--muted,
+.kai-chat-info__body--caption {
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-chat-info__sticker {
+  display: block;
+  width: 12rem;
+  max-width: 100%;
+  margin-bottom: 0.4rem;
+  border-radius: var(--kai-radius);
+}
+
+/* A detail row: the fact's name in muted text, its value beside it, wrapping
+   when the value is long (an id or a handle). */
+.kai-chat-info__row {
+  display: flex;
+  margin: 0.3rem 0;
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-chat-info__label {
+  flex-shrink: 0;
+  margin-right: 0.6rem;
+  color: var(--kai-color-text-muted);
+}
+
+.kai-chat-info__value {
+  min-width: 0;
+  word-break: break-word;
+}
+
 /* The unread count on a room row: a red capsule, the shape both other clients
    give it (the watch's red capsule beside the title, Flutter's red badge over
    the avatar). It keeps its own colours because the row's secondary text goes

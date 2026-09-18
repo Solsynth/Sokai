@@ -82,8 +82,9 @@ export interface ReactionChip {
 
 /**
  * The post's reactions that have a bundled sticker, best first, capped at
- * `limit`. Custom `prefix+slug` reactions are not tiles — the plain count text
- * covers them — so they are filtered out here.
+ * `limit` — `0` renders every reaction, the same convention the attachment
+ * list uses. Custom `prefix+slug` reactions are not tiles — the plain count
+ * text covers them — so they are filtered out here.
  */
 export function reactionChips(
   reactions: Record<string, number>,
@@ -99,5 +100,5 @@ export function reactionChips(
   }
 
   chips.sort((a, b) => b.count - a.count);
-  return chips.slice(0, limit);
+  return limit > 0 ? chips.slice(0, limit) : chips;
 }
