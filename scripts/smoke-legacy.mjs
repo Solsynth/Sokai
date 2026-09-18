@@ -4430,21 +4430,48 @@ check(
     all('.kai-chat-bubble')[1].className.indexOf('kai-chat-bubble--own') !== -1,
   { bubbles: bubbleTexts(), own: all('.kai-chat-bubble')[1].className },
 );
-// Every bubble says who sent it — avatar and name, on the bubble's own side.
+// A sender group renders its sender once: the group's first bubble carries the
+// avatar and the name, the continuation bubbles drop both. The peer's voice
+// note joins the "New build is up!" bubble (sent thirty seconds later) instead
+// of repeating the head, while the two single bubbles keep their own.
 check(
-  'every message carries its sender: the avatar and the name',
-  texts('.kai-chat-bubble__sender').join('|') === 'iCat|Test User|iCat|iCat' &&
+  'a sender group carries its sender once, on its first bubble',
+  texts('.kai-chat-bubble__sender').join('|') === 'iCat|Test User|iCat' &&
     (() => {
       const avatars = all('.kai-chat-bubble__avatar');
+      const bubbles = all('.kai-chat-bubble');
       return (
-        avatars.length === 4 &&
+        avatars.length === 3 &&
         avatars[0].getAttribute('src') === 'https://api.solian.app/drive/files/cat-avatar?preset=thumb' &&
-        avatars[1].getAttribute('src') === 'https://api.solian.app/drive/files/avatar-1?preset=thumb'
+        avatars[1].getAttribute('src') === 'https://api.solian.app/drive/files/avatar-1?preset=thumb' &&
+        // The group's second bubble (the voice note) has no head of its own.
+        bubbles[3].querySelector('.kai-chat-bubble__head') === null
       );
     })(),
   {
     senders: texts('.kai-chat-bubble__sender'),
     avatars: all('.kai-chat-bubble__avatar').map((node) => node.getAttribute('src')),
+  },
+);
+// The group's bubbles touch: the message with another of its group below
+// squares the bottom corner and tightens the gap, the one with another above
+// squares the top. The time is the group's last bubble's alone — the middle
+// bubble of the peer's group carries neither a head nor a time.
+check(
+  'the group reads as one unit: touching corners and one time',
+  (() => {
+    const bubbles = all('.kai-chat-bubble');
+    const name = (node) => node.className;
+    return (
+      name(bubbles[2]).indexOf('kai-chat-bubble--group-next') !== -1 &&
+      name(bubbles[3]).indexOf('kai-chat-bubble--group-prev') !== -1 &&
+      all('.kai-chat-bubble__time').length === 3 &&
+      bubbles[2].querySelector('.kai-chat-bubble__time') === null
+    );
+  })(),
+  {
+    classes: all('.kai-chat-bubble').map((node) => node.className),
+    times: texts('.kai-chat-bubble__time'),
   },
 );
 // A message's attachments render in its bubble: a picture as its thumb, a

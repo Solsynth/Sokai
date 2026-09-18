@@ -5,13 +5,17 @@
     nav-selectable="true"
     :nav-selected="isSelected ? 'true' : 'false'"
     class="kai-chat-bubble"
-    :class="{ 'kai-chat-bubble--own': own }"
+    :class="{
+      'kai-chat-bubble--own': own,
+      'kai-chat-bubble--group-prev': groupPrev,
+      'kai-chat-bubble--group-next': groupNext,
+    }"
     @click="activate"
   >
-    <!-- Every bubble carries its sender: the avatar and the name sit above the
-         body, on the side the bubble is on. The thread groups nothing, so a
-         message read on its own still says who sent it. -->
-    <span class="kai-chat-bubble__head">
+    <!-- The sender line appears once per group: the thread's first bubble of a
+         sender group carries the avatar and the name, and the continuation
+         bubbles are identified by the group they join. -->
+    <span v-if="groupFirst" class="kai-chat-bubble__head">
       <KaiAvatar
         class="kai-chat-bubble__avatar"
         :file="message.sender.account.picture"
@@ -60,8 +64,8 @@
          carries. -->
     <KaiReactionChips v-if="hasReactions" :reactions="message.reactions" />
 
-    <span class="kai-chat-bubble__meta">
-      <span v-if="time" class="kai-chat-bubble__time">{{ time }}</span>
+    <span v-if="showMeta" class="kai-chat-bubble__meta">
+      <span v-if="groupLast && time" class="kai-chat-bubble__time">{{ time }}</span>
       <span v-if="message.status === 'pending'" class="kai-chat-bubble__state">
         {{ t('chat_sending') }}
       </span>
@@ -89,9 +93,12 @@ import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.j
 import { useChatStore } from '~/src/stores/chat.js';
 
 /**
- * One message in a chat thread: its sender (avatar and name — the bubble is on
- * that sender's side), the content, the attachments, and a meta line with the
- * relative time and delivery state. A pending row shows a sending marker.
+ * One message in a chat thread: its content, its attachments, and a meta line
+ * with the time and delivery state. The view hands each bubble its place in a
+ * sender group — the group's first bubble carries the sender (avatar and name,
+ * on the side the bubble is on), its last the time, and the continuation
+ * bubbles are the compact middle: no sender line, no time, corners squared
+ * where the group's bubbles touch.
  *
  * Every message is a D-pad stop, so a press moves the highlight to the message
  * beside it — never over one. Enter opens the message's media in the lightbox
@@ -107,8 +114,26 @@ const props = withDefaults(
     own?: boolean;
     /** Eligible for the highlight when the thread mounts — the newest media. */
     initial?: boolean;
+    /** First of its sender group: carries the sender line. Defaults on so a
+     *  lone bubble still says who sent it. */
+    groupFirst?: boolean;
+    /** Last of its sender group: carries the time. Defaults on for the same
+     *  reason. */
+    groupLast?: boolean;
+    /** Another bubble of the same group sits above: squares the top corner. */
+    groupPrev?: boolean;
+    /** Another bubble of the same group sits below: squares the bottom corner
+     *  and tightens the gap. */
+    groupNext?: boolean;
   }>(),
-  { own: false, initial: false },
+  {
+    own: false,
+    initial: false,
+    groupFirst: true,
+    groupLast: true,
+    groupPrev: false,
+    groupNext: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -176,6 +201,18 @@ const time = computed(() => {
   if (!relative) return '';
   return 'key' in relative ? t(relative.key, relative.args) : relative.text;
 });
+
+/**
+ * The meta line: the group's time on its last bubble, plus any per-message
+ * markers (sending, edited) on their own bubble wherever it sits — a sending
+ * or edited row must not lose its state to the group.
+ */
+const showMeta = computed(
+  () =>
+    (props.groupLast && time.value !== '') ||
+    props.message.status === 'pending' ||
+    Boolean(props.message.editedAt),
+);
 
 /**
  * The message this one answers, from the loaded thread. A reply whose target

@@ -41,12 +41,16 @@
           -->
           <ul class="kai-chat">
             <KaiChatBubble
-              v-for="message in displayMessages"
-              :key="message.id"
-              :message="message"
-              :own="message.senderId === selfAccountId"
-              :initial="message.id === initialId"
-              @open="openMedia(message)"
+              v-for="row in rows"
+              :key="row.message.id"
+              :message="row.message"
+              :own="row.message.senderId === selfAccountId"
+              :initial="row.message.id === initialId"
+              :group-first="row.groupFirst"
+              :group-last="row.groupLast"
+              :group-prev="row.groupPrev"
+              :group-next="row.groupNext"
+              @open="openMedia(row.message)"
               @selected="selectedId = $event"
             />
           </ul>
@@ -104,6 +108,13 @@ import { chatRoomTitle, useChatStore } from '~/src/stores/chat.js';
  * which is what plays a voice note back — and the right key opens the
  * highlighted message's options sheet (reply, react, edit, delete, refresh),
  * the same sheet the post screens hang off their highlighted row.
+ *
+ * The thread groups a sender's consecutive messages while they stay within a
+ * few minutes of each other, the same rule Solian's room list applies: the
+ * group's first bubble carries the sender line, its last the time, and the
+ * bubbles between are the compact continuation (no sender, no time, corners
+ * squared where they touch). The grouping is display only — every message
+ * stays a D-pad stop and an option-sheet row.
  */
 
 const props = withDefaults(defineProps<{ params?: Record<string, string> }>(), {
@@ -116,6 +127,54 @@ const chat = useChatStore();
 /** The store's thread is newest-first (the API's order); display reverses it. */
 const thread = computed(() => chat.messages[roomId.value] || []);
 const displayMessages = computed(() => thread.value.slice().reverse());
+
+/**
+ * Solian's room list groups a sender's consecutive messages while each stays
+ * within a few minutes of the one before it; the thread then renders the group
+ * as one unit — one sender line, one time, bubbles that touch. The window is
+ * the same 3 minutes Solian allows between adjacent messages.
+ */
+const GROUP_GAP_MS = 3 * 60 * 1000;
+
+/** Whether two consecutive messages belong to one sender group. A row with no
+ *  readable time never joins a group — it is its own group of one. */
+function sameSenderGroup(a: ChatMessage, b: ChatMessage): boolean {
+  if (a.senderId !== b.senderId) return false;
+  if (!a.createdAt || !b.createdAt) return false;
+  return Math.abs(Date.parse(a.createdAt) - Date.parse(b.createdAt)) <= GROUP_GAP_MS;
+}
+
+/** One row of the thread as the list renders it, with its place in its sender
+ *  group: the first row carries the sender line, the last the time, and the
+ *  middle rows are the compact continuation. */
+interface ThreadRow {
+  message: ChatMessage;
+  groupFirst: boolean;
+  groupLast: boolean;
+  groupPrev: boolean;
+  groupNext: boolean;
+}
+
+/** The thread as rows, each flagged with its sender group's edges. Every
+ *  message is its own group of one unless the one before and/or after it is
+ *  the same sender within the group window. */
+const rows = computed<ThreadRow[]>(() => {
+  const list = displayMessages.value;
+  const result: ThreadRow[] = new Array(list.length);
+  for (let index = 0; index < list.length; index += 1) {
+    const message = list[index];
+    const groupPrev = index > 0 && sameSenderGroup(list[index - 1], message);
+    const groupNext = index < list.length - 1 && sameSenderGroup(list[index + 1], message);
+    result[index] = {
+      message,
+      groupFirst: !groupPrev,
+      groupLast: !groupNext,
+      groupPrev,
+      groupNext,
+    };
+  }
+  return result;
+});
 const status = computed(() => chat.messageStatus[roomId.value] || 'idle');
 const selfAccountId = computed(() => chat.selfAccountId);
 

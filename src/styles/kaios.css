@@ -1937,7 +1937,9 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
    sit on the right with the accent background — the two-sided conversation
    shape the design guide's messaging pattern describes. The metrics are the
    compact end of the guide: a thread is many bubbles on a small screen, so the
-   air between them is what the vertical budget saves. */
+   air between them is what the vertical budget saves. A sender group's
+   continuation bubbles tighten that air further (see the group rules below),
+   and their sender line and time are handled by the view — one each per group. */
 .kai-chat-bubble {
   display: flex;
   flex-direction: column;
@@ -1959,6 +1961,32 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
   align-self: flex-end;
   background: var(--kai-color-accent);
   color: var(--kai-color-on-accent);
+}
+
+/* A sender group: consecutive bubbles from one sender within the group window
+   (the view flags them). The bubbles that meet square their avatar-side
+   corners so the group reads as one unit — the shape Solian's message bubble
+   gives its own groups — and the continuation bubbles sit closer, the air
+   belonging between groups instead of inside one. The far side keeps its
+   radius, and the accent bubble mirrors the squaring on its own edge. */
+.kai-chat-bubble--group-prev {
+  border-top-left-radius: 0;
+}
+
+.kai-chat-bubble--group-next {
+  border-bottom-left-radius: 0;
+  margin-bottom: 0.15rem;
+}
+
+.kai-chat-bubble--own.kai-chat-bubble--group-prev {
+  border-top-left-radius: var(--kai-radius);
+  border-top-right-radius: 0;
+}
+
+.kai-chat-bubble--own.kai-chat-bubble--group-next {
+  border-bottom-left-radius: var(--kai-radius);
+  border-bottom-right-radius: 0;
+  margin-bottom: 0.15rem;
 }
 
 /* A bubble's background already says who sent it, so the highlight is a ring
