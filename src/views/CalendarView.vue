@@ -463,13 +463,14 @@ watch(
  * the lightbox and the reaction picker use), and only while the grid is the
  * highlight: on the agenda the arrows must keep walking the rows.
  *
- * Inside the grid the cursor clamps at the week's edges — a Sunday must not
- * wrap onto a Monday — and the clamp consumes the press, so an edge press can
- * never spill sideways into the month bar: the month changes only when one of
- * the bar's own arrows is selected and activated, never as a side effect of
- * walking the days. Only the first and last rows let a vertical press fall
- * through, which is how the month bar above and the agenda below are reached
- * the ordinary way.
+ * The cursor moves a day or a week at a time, and it never leaves the month it
+ * started in on the D-pad: the grid's outside days are reached by clicking,
+ * and the month bar's arrows are the only keys that change the month. At the
+ * grid's own edges the press is released instead — UP from the first row walks
+ * the highlight to the month bar, DOWN from the last row into the day's
+ * content below (the agenda), so the day's detail is always reachable from
+ * the grid. LEFT/RIGHT at a week's edge clamp: a Sunday must not wrap onto a
+ * Monday.
  */
 function onKeydown(event: KeyboardEvent): void {
   if (!isSelected.value) return;
@@ -478,6 +479,7 @@ function onKeydown(event: KeyboardEvent): void {
   const index = keys.indexOf(cursor.value);
   const row = Math.floor(index / COLUMNS);
   const column = index % COLUMNS;
+  const month = cursor.value.slice(0, 7);
 
   let next = -1;
   if (event.key === KEY.LEFT && column > 0) next = index - 1;
@@ -485,24 +487,27 @@ function onKeydown(event: KeyboardEvent): void {
   else if (event.key === KEY.UP && row > 0) next = index - COLUMNS;
   else if (event.key === KEY.DOWN && row < ROWS - 1) next = index + COLUMNS;
 
-  if (next < 0) {
-    // Only a horizontal edge press is consumed: the cursor clamps at a week's
-    // edge — a Sunday must not wrap onto a Monday — and the press must not
-    // spill into the month bar, which is how a D-pad press could change the
-    // month by accident. Everything else falls through: UP at the first row
-    // and DOWN at the last reach the month bar and the agenda the ordinary
-    // way, and keys that are not grid directions (Enter, the softkeys, the
-    // phone pad) belong to the app-wide handler.
-    if (event.key === KEY.LEFT || event.key === KEY.RIGHT) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+  // A move that stays inside the month is the grid's: the cursor takes it.
+  if (next >= 0 && keys[next].slice(0, 7) === month) {
+    event.preventDefault();
+    event.stopPropagation();
+    setCursor(keys[next]);
     return;
   }
 
-  event.preventDefault();
-  event.stopPropagation();
-  setCursor(keys[next]);
+  // Anything else is the grid's edge, and the cursor does not leave the month
+  // on the D-pad — the month bar's arrows own that. A press into the
+  // neighbouring month's row is released instead: UP from the first row walks
+  // the highlight to the month bar above, DOWN from the last row into the
+  // day's content below (the agenda) — so the day's detail stays reachable
+  // from the grid. LEFT/RIGHT at a week's edge clamp: a Sunday must not wrap
+  // onto a Monday, and the press must not spill into the month bar. Keys that
+  // are not grid directions (Enter, the softkeys, the phone pad) fall through
+  // to the app-wide handler.
+  if (event.key === KEY.LEFT || event.key === KEY.RIGHT) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
 }
 
 onMounted(() => {
