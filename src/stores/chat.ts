@@ -221,13 +221,46 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function mergeMessages(roomId: string, incoming: ChatMessage[]): void {
-    if (!incoming.length) return;
+  /**
+   * How long a live message's cache write waits before it lands, so a burst of
+   * live traffic coalesces into one write instead of one whole-window JSON
+   * round trip plus IndexedDB transaction per packet. The window is small:
+   * only the realtime path uses this, user actions still persist immediately,
+   * and the cache is disposable — a write that loses the race with app exit
+   * costs a refetch, never data.
+   */
+  const PERSIST_COALESCE_MS = 600;
+  /** Pending coalesced thread writes, keyed by room id. */
+  const pendingMessagePersists = new Map<string, number>();
+
+  /** Schedules a room's thread write; a later live message reschedules it. */
+  function scheduleMessagePersist(roomId: string): void {
+    const pending = pendingMessagePersists.get(roomId);
+    if (pending) window.clearTimeout(pending);
+    pendingMessagePersists.set(
+      roomId,
+      window.setTimeout(() => {
+        pendingMessagePersists.delete(roomId);
+        void persist('messages', roomId);
+      }, PERSIST_COALESCE_MS),
+    );
+  }
+
+  /**
+   * Merges incoming rows into the room's thread, returning whether the thread
+   * changed. A merge that changes nothing — every incoming row already present
+   * and nothing to replace, e.g. the gateway echoing a row the send already
+   * merged — leaves the state alone: the common live-message duplicate must
+   * not rebuild, re-sort and repaint a 500-row window.
+   */
+  function mergeMessages(roomId: string, incoming: ChatMessage[]): boolean {
+    if (!incoming.length) return false;
     const existing = messages.value[roomId] || [];
     const byId = new Map<string, ChatMessage>();
     for (let index = 0; index < existing.length; index += 1) {
       byId.set(existing[index].id, existing[index]);
     }
+    let changed = false;
     for (let index = 0; index < incoming.length; index += 1) {
       const message = incoming[index];
       // A placeholder or an event row has nothing to draw; it never enters the
@@ -239,10 +272,13 @@ export const useChatStore = defineStore('chat', () => {
       // replaced when the server echo (same client_message_id) arrives.
       if (!current || current.status === '') {
         byId.set(message.id, message);
+        changed = true;
       }
     }
+    if (!changed) return false;
     const merged = Array.from(byId.values()).sort(byNewest);
     messages.value = { ...messages.value, [roomId]: merged };
+    return true;
   }
 
   /** Whether the room's loaded thread already holds this message. */
@@ -951,6 +987,12 @@ export const useChatStore = defineStore('chat', () => {
     // The realtime channel is the account's too: close it so a signed-out
     // session cannot keep receiving pushes on a dead token.
     closeChatWs();
+    // No coalesced write may outlive the account that scheduled it: the cache
+    // is being cleared, and a late write could repopulate it with rows of a
+    // session already gone.
+    const pending = Array.from(pendingMessagePersists.values());
+    for (let index = 0; index < pending.length; index += 1) window.clearTimeout(pending[index]);
+    pendingMessagePersists.clear();
     if (db) {
       const handle = db;
       db = null;
@@ -1008,10 +1050,12 @@ export const useChatStore = defineStore('chat', () => {
   /** Merges a live message: into the open thread, or as unread + preview. */
   function applyLiveMessage(message: ChatMessage): void {
     if (message.roomId === activeRoomId.value) {
-      mergeMessages(activeRoomId.value, [{ ...message, status: 'sent' }]);
+      // A merge that changed nothing (the gateway re-pushing a row the send
+      // already merged) must not slide the window or touch the cache.
+      if (!mergeMessages(activeRoomId.value, [{ ...message, status: 'sent' }])) return;
       // The thread slides towards the present, so the oldest rows fall out.
       capOldest(activeRoomId.value);
-      void persist('messages', activeRoomId.value);
+      scheduleMessagePersist(activeRoomId.value);
       return;
     }
     const summary = summaries.value[message.roomId];

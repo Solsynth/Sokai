@@ -863,6 +863,24 @@ body {
   font-size: var(--kai-fs-p-sec);
 }
 
+/* A compact ring beside a label — an in-flight write on a screen that still
+   carries its form (a composer), or one that also holds a QR and a code,
+   where the full-page spinner would be too tall and push the content. */
+.kai-waiting {
+  display: flex;
+  align-items: center;
+  margin: 0.2rem 0 0.6rem;
+  color: var(--kai-color-text-muted);
+  font-size: var(--kai-fs-p-sec);
+}
+
+.kai-waiting .kai-spinner__ring {
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: 0.8rem;
+  border-width: 0.2rem;
+}
+
 /* --- Search ---------------------------------------------------------- */
 
 /* The search entry above the pager reads as a field: edge-to-edge, muted
@@ -1462,23 +1480,6 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 .kai-account__qr img {
   width: 14rem;
   height: 14rem;
-}
-
-/* The waiting state is a compact ring beside the label — the full-page
-   spinner is too tall for a screen that also carries a QR and a code. */
-.kai-account__waiting {
-  display: flex;
-  align-items: center;
-  margin: 0.2rem 0 0.6rem;
-  color: var(--kai-color-text-muted);
-  font-size: var(--kai-fs-p-sec);
-}
-
-.kai-account__waiting .kai-spinner__ring {
-  width: 1.6rem;
-  height: 1.6rem;
-  margin-right: 0.8rem;
-  border-width: 0.2rem;
 }
 
 /* The profile banner leads the signed-in screen: edge-to-edge like the detail

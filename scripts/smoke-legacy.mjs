@@ -3423,8 +3423,8 @@ check(
 );
 check(
   'the user code and waiting state are shown for the other device',
-  text('.kai-account__code') === 'CODE-1234' && text('.kai-account__waiting') === 'account_waiting',
-  { code: text('.kai-account__code'), waiting: text('.kai-account__waiting') },
+  text('.kai-account__code') === 'CODE-1234' && text('.kai-waiting') === 'account_waiting',
+  { code: text('.kai-account__code'), waiting: text('.kai-waiting') },
 );
 check(
   'the signing-in screen shows a QR code encoding the prefilled page',

@@ -26,7 +26,7 @@
 
         <p class="kai-account__code">{{ accountStore.userCode }}</p>
 
-        <p v-if="accountStore.waiting" class="kai-account__waiting">
+        <p v-if="accountStore.waiting" class="kai-waiting">
           <span class="kai-spinner__ring"></span>
           {{ t('account_waiting') }}
         </p>

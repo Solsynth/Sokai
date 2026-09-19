@@ -138,10 +138,26 @@ const GROUP_GAP_MS = 3 * 60 * 1000;
 
 /** Whether two consecutive messages belong to one sender group. A row with no
  *  readable time never joins a group — it is its own group of one. */
+const parsedTimes = new WeakMap<ChatMessage, number>();
+
+/** The message's instant, parsed once per message object: the thread's rows
+ *  recompute on every live message, and re-parsing the same ISO strings on a
+ *  500-row window each time is pure waste. */
+function messageTime(message: ChatMessage): number {
+  let time = parsedTimes.get(message);
+  if (time === undefined) {
+    time = message.createdAt ? Date.parse(message.createdAt) : 0;
+    parsedTimes.set(message, time);
+  }
+  return time;
+}
+
 function sameSenderGroup(a: ChatMessage, b: ChatMessage): boolean {
   if (a.senderId !== b.senderId) return false;
-  if (!a.createdAt || !b.createdAt) return false;
-  return Math.abs(Date.parse(a.createdAt) - Date.parse(b.createdAt)) <= GROUP_GAP_MS;
+  const aTime = messageTime(a);
+  const bTime = messageTime(b);
+  if (!aTime || !bTime) return false;
+  return Math.abs(aTime - bTime) <= GROUP_GAP_MS;
 }
 
 /** One row of the thread as the list renders it, with its place in its sender

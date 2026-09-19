@@ -290,8 +290,9 @@ Implemented against `developer.kaiostech.com/docs/design-guide`:
   The thread is a *window* on the room, not the whole of it: fifty messages load on open, the
   rest sits behind a Load more row above the oldest message, and at most five hundred are held
   at once — the newest slide out as older pages come in, the oldest as live messages arrive, and
-  a row that leaves the window was already written to the IndexedDB cache, so nothing is lost
-  from the device. The row is an ordinary selectable, so the D-pad reaches it by walking up past
+  a row that leaves the window is either already written to the IndexedDB cache or recoverable
+  by the next page fetch (live writes coalesce; see [Chat storage](#chat-storage)), so nothing
+  is lost from the device. The row is an ordinary selectable, so the D-pad reaches it by walking up past
   the oldest message, and it stays put while its page loads. A row that vanishes under the
   highlight — that row once the history runs out, a message deleted by a live event — hands the
   highlight to its nearest surviving neighbour rather than to the screen's own anchor, so a
@@ -621,6 +622,11 @@ The chat screens cache in **IndexedDB**, written to the KaiOS storage guidelines
   (~30MB), so every write is best-effort: a failure keeps the in-memory copy and sets a notice
   (`chat_storage_error`) instead of throwing. Reads keep working — the cache is an optimisation,
   never the source of truth.
+- **Live traffic coalesces.** A live message landing in the open room schedules that room's
+  thread write; a burst of packets is one write once it settles (600 ms), not one whole-window
+  JSON round trip per packet. User actions — a send, a page load, a react, an edit — still
+  persist immediately; only the realtime path coalesces, and a write that loses the race with
+  app exit costs a refetch, never data.
 - **Content is capped.** A room keeps at most 10,000 message rows and the oldest are pruned on
   save (the guideline's own example), so a long-lived room cannot grow without bound. The thread
   reads that history a page at a time — a cursor over the `byRoom` index, stepped `count` times —

@@ -94,6 +94,14 @@
         />
       </KaiList>
 
+      <!-- In flight, the waiting line is the send's feedback: the request can
+           take a beat (an upload first, then the POST), and the right key is
+           already inert so this is the one thing that moves. -->
+      <p v-if="sending" class="kai-waiting">
+        <span class="kai-spinner__ring"></span>
+        {{ t('chat_sending_label') }}
+      </p>
+
       <p v-if="chat.sendError" class="kai-text kai-text--error">{{ t(chat.sendError) }}</p>
       <p v-if="dictationError" class="kai-text kai-text--error">{{ t(dictationError) }}</p>
       <p v-if="chat.storageError" class="kai-text kai-text--error">{{ t('chat_storage_error') }}</p>
@@ -285,23 +293,36 @@ function toggleRecord(): void {
  * rewritten message instead. The store clears the draft (and its files) on
  * success and puts the text back on failure, so an empty draft means it went —
  * and a failure keeps this screen up for the retry, which is the right key.
+ *
+ * The request can take a beat (a file upload first, then the POST), so a send
+ * is guarded and announced: the right key goes inert and the waiting line
+ * shows while it is in flight — the same double-submit guard the post
+ * composer's `submitting` keeps.
  */
+const sending = ref(false);
+
 async function send(): Promise<void> {
-  // A take still running is finished first, not thrown away: Send while
-  // recording means "record this and send it".
-  if (recording.value) await finishRecording();
+  if (sending.value) return;
+  sending.value = true;
+  try {
+    // A take still running is finished first, not thrown away: Send while
+    // recording means "record this and send it".
+    if (recording.value) await finishRecording();
 
-  if (editingId.value) {
-    const text = editingText.value.trim();
-    if (!text) return;
-    const ok = await chat.edit(roomId.value, editingId.value, text, originalAttachmentIds.value);
-    if (ok) pop();
-    return;
+    if (editingId.value) {
+      const text = editingText.value.trim();
+      if (!text) return;
+      const ok = await chat.edit(roomId.value, editingId.value, text, originalAttachmentIds.value);
+      if (ok) pop();
+      return;
+    }
+
+    if (!hasBody.value) return;
+    await chat.send(roomId.value, draft.value, attachments.value, replyTo.value);
+    if (!chat.sendError) pop();
+  } finally {
+    sending.value = false;
   }
-
-  if (!hasBody.value) return;
-  await chat.send(roomId.value, draft.value, attachments.value, replyTo.value);
-  if (!chat.sendError) pop();
 }
 
 onMounted(() => {
@@ -314,9 +335,11 @@ onMounted(() => {
       ? { label: t('chat_stop'), onPress: () => void finishRecording() }
       : dictating.value
         ? { label: t('dictation_stop'), onPress: stopDictation }
-        : hasBody.value
-          ? { label: t('chat_send'), onPress: send }
-          : { label: '' },
+        : sending.value
+          ? { label: '', onPress: null }
+          : hasBody.value
+            ? { label: t('chat_send'), onPress: send }
+            : { label: '' },
   }));
 
   // Keep the room subscribed while writing in it: a message that arrives now

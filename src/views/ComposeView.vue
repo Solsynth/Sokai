@@ -113,6 +113,14 @@
             />
           </KaiList>
 
+          <!-- In flight, the waiting line is the submit's feedback: attachments
+               upload first, then the post goes out, and the right key is
+               already inert so this is the one thing that moves. -->
+          <p v-if="submitting" class="kai-waiting">
+            <span class="kai-spinner__ring"></span>
+            {{ t('compose_posting') }}
+          </p>
+
           <p v-if="errorKey" class="kai-text kai-text--error">{{ t(errorKey) }}</p>
         </template>
       </template>
