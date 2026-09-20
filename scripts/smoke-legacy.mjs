@@ -1359,6 +1359,18 @@ const PREAMBLE = `<script>
     if (url.indexOf('/stargate/auth/open/token') !== -1) {
       if (String(xhr.requestBody || '').indexOf('grant_type=refresh_token') !== -1) {
         window.__refreshes += 1;
+        /* The ?stale-refresh scenario: the stored refresh token is one the
+           server has already rotated away (an interrupted exchange persisted
+           it too late). A refresh carrying exactly that token is rejected, so
+           the fallback promotion has to pick up the chain instead. */
+        var refreshBody = String(xhr.requestBody || '');
+        if (
+          window.location.search.indexOf('stale-refresh') !== -1 &&
+          refreshBody.indexOf('refresh_token=stale-refresh') !== -1
+        ) {
+          xhr.respond(400, { error: 'invalid_grant', error_description: 'Invalid or expired refresh token' }, '');
+          return;
+        }
         xhr.respond(CANNED.refresh.status, CANNED.refresh.body, CANNED.refresh.headers);
         return;
       }
@@ -6113,6 +6125,65 @@ const vAccountName = () => {
 await runtilTimer(() => vAccountName() === 'Test User');
 check('the retried read reaches the screen', vAccountName() === 'Test User', vAccountName());
 revoked.window.close();
+
+// ---- Relaunch with a stale refresh token -----------------------------------
+// The interrupted-exchange case: the server rotated the refresh token, the app
+// was killed before the new pair was persisted, so storage holds a token the
+// server no longer accepts. The fallback token saved from before the rotation
+// is promoted and tried once — the session must survive, not flip to expired.
+const staleHtml = html
+  .replace(/(src|href)="\.\//g, `$1="${distUrl}`)
+  .replace(
+    '<head>',
+    `<head><script>window.localStorage.setItem('sokai.session', ${JSON.stringify(
+      JSON.stringify({
+        ...SEED,
+        refreshToken: 'stale-refresh',
+        previousRefreshToken: 'test-refresh',
+        expiresAt: Date.now() - 1000,
+      }),
+    )});</script>`,
+  );
+const stale = new JSDOM(staleHtml.replace('http://sokai.test/index.html', 'http://sokai.test/index.html?stale-refresh'), {
+  runScripts: 'dangerously',
+  resources: 'usable',
+  pretendToBeVisual: true,
+  url: 'http://sokai.test/index.html?stale-refresh',
+});
+const sw = stale.window;
+if (sw.document.readyState !== 'complete') {
+  await new Promise((resolve) => sw.addEventListener('load', resolve, { once: true }));
+}
+const sRequests = sw.__requests;
+await runtilTimer(() =>
+  sRequests.filter((request) => request.url.indexOf('/calendar/countdown') !== -1).length >= 1,
+);
+
+const sRefreshes = sRequests
+  .filter((request) => request.url.indexOf('/stargate/auth/open/token') !== -1)
+  .map((request) => String(request.requestBody || ''));
+check(
+  'a stale refresh token is rejected, then the fallback token is tried',
+  sRefreshes.length === 2 &&
+    sRefreshes[0].indexOf('refresh_token=stale-refresh') !== -1 &&
+    sRefreshes[1].indexOf('refresh_token=test-refresh') !== -1,
+  sRefreshes.map((body) => body.slice(0, 60)),
+);
+const sCountdown = sRequests.filter((request) => request.url.indexOf('/calendar/countdown') !== -1)[0];
+check(
+  'the fallback refresh restores a live bearer for the racing read',
+  Boolean(sCountdown) && sCountdown.requestHeaders.Authorization === 'Bearer refreshed-access',
+  sCountdown ? sCountdown.requestHeaders.Authorization : null,
+);
+const sStored = sw.localStorage.getItem('sokai.session');
+check(
+  'the surviving session is persisted with the rotated token as the new fallback',
+  Boolean(sStored) &&
+    JSON.parse(sStored).refreshToken === 'test-refresh-2' &&
+    JSON.parse(sStored).previousRefreshToken === 'test-refresh',
+  sStored ? JSON.parse(sStored).refreshToken + ' / ' + JSON.parse(sStored).previousRefreshToken : null,
+);
+stale.window.close();
 
 dom.window.close();
 

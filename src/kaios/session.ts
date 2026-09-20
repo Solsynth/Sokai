@@ -52,6 +52,15 @@ const DEFAULT_EXPIRES_S = 600;
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+/**
+ * The refresh token that was current before `refreshToken`. Kept through
+ * rotation and across restarts so a session is not orphaned by an interrupted
+ * exchange (the server rotated the token, the app was killed before the new
+ * pair was persisted) or by a stale write: when the current token is rejected
+ * with `invalid_grant`, this one is tried before the session is dropped. It
+ * may itself be dead — it is a fallback, not a guarantee.
+ */
+let previousRefreshToken: string | null = null;
 /** Epoch milliseconds at which `accessToken` expires. */
 let expiresAt = 0;
 /**
@@ -65,6 +74,8 @@ let refreshInFlight: Promise<void> | null = null;
 interface StoredSession {
   accessToken?: unknown;
   refreshToken?: unknown;
+  /** The fallback refresh token kept from before the last rotation. */
+  previousRefreshToken?: unknown;
   expiresAt?: unknown;
   account?: unknown;
 }
@@ -119,6 +130,8 @@ export function initSession(): void {
 
   accessToken = raw.accessToken;
   refreshToken = typeof raw.refreshToken === 'string' ? raw.refreshToken : null;
+  previousRefreshToken =
+    typeof raw.previousRefreshToken === 'string' ? raw.previousRefreshToken : null;
   expiresAt = typeof raw.expiresAt === 'number' ? raw.expiresAt : 0;
   // Optimistic: the cached identity renders immediately; a dead token is
   // discovered lazily by the first `bearerToken()` refresh. The cached
@@ -136,6 +149,7 @@ function saveSession(): void {
   const record: StoredSession = {
     accessToken: accessToken as string | undefined,
     refreshToken: refreshToken as string | undefined,
+    previousRefreshToken: previousRefreshToken as string | undefined,
     expiresAt: expiresAt,
     account: useAccountStore().account,
   };
@@ -183,9 +197,17 @@ export async function bearerToken(forceRefresh = false): Promise<string | null> 
   // refresh token means the access token is near (or past) expiry with no way
   // to renew it — holding onto the session would only hand every call a dead
   // bearer. End it cleanly, with the sign-in screen explaining what happened.
+  // Unless the fallback token survived where the current one was lost: promote
+  // it and refresh with that before giving up.
   if (!refreshToken) {
-    expireSession();
-    return null;
+    if (previousRefreshToken) {
+      refreshToken = previousRefreshToken;
+      previousRefreshToken = null;
+      saveSession();
+    } else {
+      expireSession();
+      return null;
+    }
   }
 
   await refreshOnce();
@@ -217,6 +239,14 @@ async function refreshOnce(): Promise<void> {
  * The exchange itself: installs the new pair, or ends a session the server has
  * rejected. A transient failure leaves the cached token in place, so the
  * request that needed it still goes out and reports its own outcome.
+ *
+ * A rejected exchange (`invalid_grant`) normally means the session is dead
+ * server-side. But a refresh token can also be rejected because it is *stale*
+ * — the app was killed after the server rotated it but before the new pair was
+ * persisted, leaving the previous token in storage. So before dropping the
+ * session, the previous token is tried once: if it succeeds, the rotation
+ * chain is picked up where it was interrupted. Only when that also fails is
+ * the session ended.
  */
 async function exchangeRefresh(): Promise<void> {
   const token = refreshToken;
@@ -224,15 +254,41 @@ async function exchangeRefresh(): Promise<void> {
   try {
     storePair(await refresh(token));
   } catch (error) {
-    if (error && (error as FlowError).error === 'invalid_grant') expireSession();
+    if (error && (error as FlowError).error === 'invalid_grant') {
+      const fallback = previousRefreshToken;
+      if (!fallback || fallback === token) {
+        expireSession();
+        return;
+      }
+      // The stored current token is stale. Promote the fallback and retry once
+      // — a single try, so a dead fallback cannot spin the exchange.
+      previousRefreshToken = null;
+      refreshToken = fallback;
+      saveSession();
+      try {
+        storePair(await refresh(fallback));
+      } catch (secondError) {
+        if (secondError && (secondError as FlowError).error === 'invalid_grant') {
+          expireSession();
+        }
+      }
+    }
   }
 }
 
 function storePair(pair: TokenPair): void {
   accessToken = pair.accessToken;
   // Stargate may rotate the refresh token or omit it; keep the previous one
-  // when a response does not carry a replacement.
-  if (pair.refreshToken) refreshToken = pair.refreshToken;
+  // when a response does not carry a replacement. When it does carry a new
+  // one, the outgoing token is preserved as the fallback — an interrupted
+  // exchange (or a stale write) must not orphan a session that an earlier
+  // token could still renew.
+  if (pair.refreshToken) {
+    if (refreshToken && refreshToken !== pair.refreshToken) {
+      previousRefreshToken = refreshToken;
+    }
+    refreshToken = pair.refreshToken;
+  }
   expiresAt = Date.now() + pair.expiresIn * 1000;
   saveSession();
 }
@@ -241,6 +297,7 @@ function dropSession(): void {
   pollGeneration += 1;
   accessToken = null;
   refreshToken = null;
+  previousRefreshToken = null;
   expiresAt = 0;
   useAccountStore().reset();
   clearStoredSession();
@@ -271,6 +328,11 @@ export async function startSignIn(): Promise<void> {
   const account = useAccountStore();
   if (account.phase === 'signing-in') cancelSignIn();
   const generation = ++pollGeneration;
+
+  // A fresh flow must not inherit a fallback token from a previous session —
+  // the new pair supersedes everything before it.
+  previousRefreshToken = null;
+  saveSession();
 
   account.phase = 'signing-in';
   account.waiting = false;
