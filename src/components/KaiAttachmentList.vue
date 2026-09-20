@@ -13,6 +13,7 @@
       >
         <img
           class="kai-attachment__image"
+          :class="{ 'kai-attachment__image--unknown': attachment.unknown }"
           :src="attachment.src"
           :width="attachment.width"
           :height="attachment.height"
@@ -69,6 +70,8 @@ interface ShownAttachment {
   width: number;
   height: number;
   blur: string;
+  /** The server sized no dimensions for this media: the box needs a floor. */
+  unknown: boolean;
 }
 
 /** id of every attachment whose file failed to load, so its line stands alone. */
@@ -100,6 +103,7 @@ const shown = computed<ShownAttachment[]>(() => {
     // Decoded once per hash and cached: a feed page full of the same picture
     // pays for the decode once. '' when the server sent no hash.
     blur: placeholderDataUrl(attachment.blurhash),
+    unknown: !attachment.width || !attachment.height,
   }));
 });
 

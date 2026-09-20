@@ -739,6 +739,12 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* A picture's BlurHash wash while its bytes are on the wire: the wash is a
+     32×32 decode stretched over the stage, the same treatment the attachment
+     rows give it (see `.kai-attachment__image`), so a slow link shows the
+     picture's colours instead of a dead black screen. */
+  background-size: cover;
+  background-position: center;
 }
 
 /* At fit the media stays contained; zoomed, the inline width/height and pan
@@ -1263,6 +1269,15 @@ li.kai-post[nav-selected="true"] .kai-post__attach-kind,
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
+}
+
+/* A media file the server sized no dimensions for (a video poster without
+   metadata) has no ratio for `height: auto` to reserve, so its box would
+   collapse to zero and jump when the bytes land. Give it a floor instead:
+   `object-fit: cover` (the row and bubble rules) crops the landed picture to
+   fill it, and the fallback line contexts stretch harmlessly. */
+.kai-attachment__image--unknown {
+  min-height: 10rem;
 }
 
 /* A picture (or a video's poster frame) with the play badge centred on it:
@@ -2086,11 +2101,17 @@ li.kai-post[nav-selected="true"] .kai-post__counts {
 /* A sticker is the message: it sits at its natural size (a thumb preset, so a
    few KB), capped so an outsized one cannot fill the thread. No bubble
    padding around a transparent PNG, which is why the media row above it is
-   the only thing that gives the bubble its width here. */
+   the only thing that gives the bubble its width here. The box is reserved
+   square (`width: 12rem` with a matching height) so the thread does not
+   reflow when the bytes land — the bundled stickers are square PNGs, and
+   `object-fit: contain` letterboxes a rare non-square one instead of
+   stretching it. */
 .kai-chat-bubble__sticker {
   display: block;
   width: 12rem;
+  height: 12rem;
   max-width: 100%;
+  object-fit: contain;
   border-radius: var(--kai-radius);
 }
 

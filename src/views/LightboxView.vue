@@ -7,24 +7,31 @@
          video, and a zoomed image pans under LEFT/RIGHT and the 2/4/6/8 pad.
          Nothing else is drawn — no title bar, no key hint: the media takes the
          whole screen, and a set of more than one carries its count over it. -->
-    <main ref="stage" class="kai-content kai-lightbox">
+    <main ref="stage" class="kai-content kai-lightbox" :style="stageStyle">
       <div
         tabindex="-1"
         nav-selectable="true"
         :nav-selected="isSelected ? 'true' : 'false'"
         class="kai-lightbox__stage"
       >
-        <!-- An image shows the original bytes — the lightbox is the place for
-             full resolution, and the D-pad zooms into it. -->
+        <!-- An image shows its bytes progressively: the thumb preset first —
+             small, and almost always already in the browser's cache from the
+             row that opened the viewer — so a switch is visible immediately
+             even over a slow link, with the attachment's BlurHash wash behind
+             it. The full-resolution original then replaces the thumb once it
+             has arrived; the lightbox is the place for the original, and the
+             D-pad zooms into it. If the file will not load at all, the stage
+             says what it is instead of holding a dead frame. -->
         <img
-          v-if="current && current.kind === 'image'"
+          v-if="current && current.kind === 'image' && !failed"
           ref="image"
           class="kai-lightbox__media"
           :class="{ 'kai-lightbox__media--zoomed': zoom > 1 }"
-          :src="current ? originalUrl(current.id) : ''"
+          :src="imageSrc"
           :style="imageStyle"
           :alt="current ? describeAttachment(current) : ''"
-          @load="layout"
+          @load="onImageLoad"
+          @error="onImageError"
         />
 
         <!-- A video plays in place: the original file for playback, the
@@ -93,9 +100,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 
 import { attachmentKindKey, describeAttachment, type Attachment } from '~/src/api/models.js';
-import { originalUrl, thumbnailUrl } from '~/src/api/solian.js';
+import { fileUrl, originalUrl, thumbnailUrl } from '~/src/api/solian.js';
 import KaiPlayIcon from '~/src/components/KaiPlayIcon.vue';
 import { KEY } from '~/src/kaios/keys.js';
+import { placeholderDataUrl } from '~/src/kaios/blur.js';
 import { t } from '~/src/kaios/l10n.js';
 import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
 
@@ -134,7 +142,38 @@ const playing = ref(false);
 /** Playback position as a percentage of the duration, for the progress bar. */
 const progress = ref(0);
 
+/** Whether the image's bytes have arrived: the full-res original replaces the
+ *  thumb preview the moment it is ready, so a slow link shows the picture
+ *  instantly (the thumb preset is small, and usually cached from the row that
+ *  opened the viewer) instead of a dead frame while the original downloads. */
+const originalShown = ref(false);
+/** The current attachment's file will not load: its line is the stage. */
+const failed = ref(false);
+
 const current = computed(() => attachments.value[index.value] ?? null);
+
+/**
+ * The image's bytes, addressed by the stage it is in: the small thumb preset
+ * first (often already in the browser's cache from the row the viewer opened
+ * from), the untouched original once it has been reached — either by the
+ * preview's own `load` or, when the preview itself fails, by trying the
+ * original directly before giving up.
+ */
+const imageSrc = computed(() => {
+  const item = current.value;
+  if (!item || item.kind !== 'image') return '';
+  return originalShown.value ? originalUrl(item.id) : fileUrl(item.id);
+});
+
+/** The picture's BlurHash wash over the stage while its bytes are on the
+ *  wire; nothing once the image is up (the media covers the stage) or the
+ *  attachment has fallen back to its line. */
+const stageStyle = computed(() => {
+  const item = current.value;
+  if (!item || item.kind !== 'image' || originalShown.value || failed.value) return null;
+  const wash = item.blurhash ? placeholderDataUrl(item.blurhash) : '';
+  return wash ? { backgroundImage: 'url(' + wash + ')' } : null;
+});
 
 /**
  * The bytes to play or show. An attachment that carries its own URL (a voice
@@ -213,7 +252,29 @@ function resetView(): void {
   pan.y = 0;
   view.w = 0;
   view.h = 0;
+  originalShown.value = false;
+  failed.value = false;
   void nextTick(layout);
+}
+
+/** The image's bytes arrived: fit the stage to them, and once the preview
+ *  (thumb) is up, hand the element over to the full-res original — whose own
+ *  `load` runs this again for the final fit. */
+function onImageLoad(): void {
+  layout();
+  if (!originalShown.value) originalShown.value = true;
+}
+
+/** The current stage's bytes failed. The preview failing is not the end: the
+ *  original may still answer, so the stage tries it before giving up. A
+ *  failure of the original (or of both) leaves the attachment's line to say
+ *  what it is. */
+function onImageError(): void {
+  if (!originalShown.value) {
+    originalShown.value = true;
+    return;
+  }
+  failed.value = true;
 }
 
 /** Turns the picture by a quarter-turn; 1 goes counterclockwise, 3 clockwise. */

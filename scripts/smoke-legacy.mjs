@@ -3016,16 +3016,18 @@ check(
   { center: text('.kai-softkey__key--center'), badge: Boolean(document.querySelector('.kai-lightbox__play')) },
 );
 
-// RIGHT moves on to the picture.
+// RIGHT moves on to the picture. Its bytes load progressively: the thumb
+// preset first (jsdom never loads bytes, so the preview is what a fresh
+// switch shows), then the full-res original once that is ready.
 await press('ArrowRight');
 check(
-  'RIGHT moves to the picture',
+  'RIGHT moves to the picture, preview first',
   (() => {
     const media = document.querySelector('.kai-lightbox__media');
     return (
       Boolean(media) &&
       media.tagName === 'IMG' &&
-      media.getAttribute('src') === 'https://api.solian.app/drive/files/p1?original=1'
+      media.getAttribute('src') === 'https://api.solian.app/drive/files/p1?preset=thumb'
     );
   })(),
   (() => {
@@ -3035,6 +3037,17 @@ check(
       counter: text('.kai-lightbox__counter'),
     };
   })(),
+);
+// The preview's own load hands the element over to the full-res original.
+document.querySelector('.kai-lightbox__media').dispatchEvent(new window.Event('load'));
+await flush();
+check(
+  'the full-res original replaces the preview once its bytes arrive',
+  (() => {
+    const media = document.querySelector('.kai-lightbox__media');
+    return Boolean(media) && media.getAttribute('src') === 'https://api.solian.app/drive/files/p1?original=1';
+  })(),
+  document.querySelector('.kai-lightbox__media') ? document.querySelector('.kai-lightbox__media').getAttribute('src') : null,
 );
 
 // UP and DOWN zoom a picture in steps (the centre key is the video's play
@@ -4729,14 +4742,31 @@ check(
 await press('Enter');
 await until(() => Boolean(document.querySelector('.kai-lightbox__media')));
 check(
-  "a message's picture opens in the same viewer",
+  "a message's picture opens in the same viewer, on its preview",
+  document.querySelector('.kai-lightbox__media').getAttribute('src') ===
+    'https://api.solian.app/drive/files/att-inline?preset=thumb' &&
+    !document.querySelector('.kai-lightbox__hint') &&
+    text('.kai-softkey__key--center') === '',
+  {
+    media: document.querySelector('.kai-lightbox__media') ? document.querySelector('.kai-lightbox__media').getAttribute('src') : null,
+    counter: text('.kai-lightbox__counter'),
+    center: text('.kai-softkey__key--center'),
+  },
+);
+// The preview's load upgrades the element to the full-res original, the same
+// progression the post viewer follows.
+document.querySelector('.kai-lightbox__media').dispatchEvent(new window.Event('load'));
+await flush();
+check(
+  "a message's picture shows the original once it is ready",
   document.querySelector('.kai-lightbox__media').getAttribute('src') ===
     'https://api.solian.app/drive/files/att-inline?original=1' &&
     !document.querySelector('.kai-lightbox__hint') &&
     text('.kai-softkey__key--center') === '',
   {
-    media: document.querySelector('.kai-lightbox__media').getAttribute('src'),
+    media: document.querySelector('.kai-lightbox__media') ? document.querySelector('.kai-lightbox__media').getAttribute('src') : null,
     counter: text('.kai-lightbox__counter'),
+    center: text('.kai-softkey__key--center'),
   },
 );
 await press('Backspace');

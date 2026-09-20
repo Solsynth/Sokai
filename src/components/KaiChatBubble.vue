@@ -125,6 +125,11 @@ const props = withDefaults(
     /** Another bubble of the same group sits below: squares the bottom corner
      *  and tightens the gap. */
     groupNext?: boolean;
+    /** The thread as an id → message map, from the view. The bubble's reply
+     *  target is an O(1) lookup in this; scanning the store's array instead
+     *  would re-scan the whole window for every quoted bubble on every live
+     *  message (the store replaces the array on each merge). */
+    threadMap?: Map<string, ChatMessage> | null;
   }>(),
   {
     own: false,
@@ -133,6 +138,7 @@ const props = withDefaults(
     groupLast: true,
     groupPrev: false,
     groupNext: false,
+    threadMap: null,
   },
 );
 
@@ -217,11 +223,14 @@ const showMeta = computed(
 /**
  * The message this one answers, from the loaded thread. A reply whose target
  * left the window (or has not arrived) quotes nothing — the bubble keeps its
- * own body without a hollow reference above it.
+ * own body without a hollow reference above it. The view hands every bubble
+ * the thread as an id → message map, so the lookup is O(1); without it the
+ * bubble scans the store's array, which every live message replaces.
  */
 const quote = computed(() => {
   const targetId = props.message.repliedMessageId;
   if (!targetId) return null;
+  if (props.threadMap) return props.threadMap.get(targetId) || null;
   const thread = chat.messages[props.message.roomId] || [];
   return thread.find((item) => item.id === targetId) || null;
 });

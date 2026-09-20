@@ -50,6 +50,7 @@
               :group-last="row.groupLast"
               :group-prev="row.groupPrev"
               :group-next="row.groupNext"
+              :thread-map="threadById"
               @open="openMedia(row.message)"
               @selected="selectedId = $event"
             />
@@ -190,6 +191,22 @@ const rows = computed<ThreadRow[]>(() => {
     };
   }
   return result;
+});
+
+/**
+ * The thread as an id → message map, rebuilt once per thread change. A reply
+ * bubble looks its target up in this instead of scanning the store's array —
+ * a merge or a live message replaces that array, which would otherwise make
+ * every quoted bubble re-scan the whole window (500 rows × every quote) on
+ * each update. One O(n) build here, O(1) lookups in the bubbles.
+ */
+const threadById = computed(() => {
+  const list = displayMessages.value;
+  const map = new Map<string, ChatMessage>();
+  for (let index = 0; index < list.length; index += 1) {
+    map.set(list[index].id, list[index]);
+  }
+  return map;
 });
 const status = computed(() => chat.messageStatus[roomId.value] || 'idle');
 const selfAccountId = computed(() => chat.selfAccountId);

@@ -15,7 +15,7 @@
              and the posts follow. -->
         <KaiListItem class="kai-searchbar" :primary="t('search_hint')" @select="push('search')" />
 
-        <KaiPager v-if="pages > 1" :page="page" :pages="pages" @go="feed.load" />
+        <KaiPager v-if="pages > 1" :page="page" :pages="pages" @go="go" />
 
         <KaiList class="kai-list--flat">
           <KaiPostRow
@@ -197,6 +197,16 @@ async function onDelete(): Promise<void> {
 
 function retry(): void {
   feed.load(feed.requested);
+}
+
+/**
+ * Flips the feed to a page, ignoring a press that arrives while a flip is
+ * already in flight — a double-tap on a low-end handset would otherwise fetch
+ * and render the same page twice, for no gain and a visible hitch.
+ */
+function go(target: number): void {
+  if (status.value === 'loading') return;
+  void feed.load(target);
 }
 
 onMounted(() => {
