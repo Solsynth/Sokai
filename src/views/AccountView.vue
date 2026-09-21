@@ -55,13 +55,13 @@
         >
           <img
             class="kai-account__banner"
-            :src="fileUrl(accountStore.account.profile.background.id)"
+            :src="bannerSrc"
             alt="Account background image"
           />
         </div>
 
         <div class="kai-account__identity">
-          <img v-if="pfp" class="kai-account__pfp" :src="pfp" alt="Profile picture" />
+          <img v-if="pfp" class="kai-account__pfp" :src="cachedPfp" alt="Profile picture" />
           <div class="kai-account__who">
             <p class="kai-account__name">
               {{ accountStore.account ? accountStore.account.display : t('account_signed_in') }}
@@ -176,6 +176,7 @@ import KaiList from '~/src/components/KaiList.vue';
 import KaiListItem from '~/src/components/KaiListItem.vue';
 import KaiOptionMenu, { type Option } from '~/src/components/KaiOptionMenu.vue';
 import { t } from '~/src/kaios/l10n.js';
+import { useCachedUrl } from '~/src/kaios/media-cache.js';
 import { setBaseSoftkeys } from '~/src/kaios/nav.js';
 import { qrDataUrl } from '~/src/kaios/qrcode.js';
 import { cancelSignIn, signOut, startSignIn } from '~/src/kaios/session.js';
@@ -208,6 +209,15 @@ const pfp = computed(() => {
   const picture = accountStore.account?.profile?.picture;
   return picture ? fileUrl(picture.id) : '';
 });
+const cachedPfp = useCachedUrl(pfp);
+
+/** The account's banner, when the profile carries one — same cache path. */
+const bannerSrc = useCachedUrl(
+  computed(() => {
+    const background = accountStore.account?.profile?.background;
+    return background ? fileUrl(background.id) : '';
+  }),
+);
 
 /** 0..100 for the level progress bar; the server sends 0..1. */
 const levelPercent = computed(() => {

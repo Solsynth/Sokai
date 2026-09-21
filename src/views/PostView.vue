@@ -181,6 +181,7 @@ import KaiPostRow from '~/src/components/KaiPostRow.vue';
 import KaiReactionChips from '~/src/components/KaiReactionChips.vue';
 import KaiSpinner from '~/src/components/KaiSpinner.vue';
 import { t } from '~/src/kaios/l10n.js';
+import { cachePhotoSrcs } from '~/src/kaios/media-cache.js';
 import { move, nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
 import { pop, push } from '~/src/kaios/views.js';
 import { useAccountStore } from '~/src/stores/account.js';
@@ -271,6 +272,10 @@ const rendered = computed(() => (post.value ? bodyHtml(post.value) : ''));
  */
 function guardPhotos(root: HTMLElement | null): void {
   if (!root) return;
+
+  // The same body images, upgraded to their disk-cached URLs once ready —
+  // v-html hands Vue no hook for its nodes, so this runs on the same pass.
+  cachePhotoSrcs(root);
 
   const images = root.querySelectorAll('img.kai-md__photo');
   for (let index = 0; index < images.length; index += 1) {

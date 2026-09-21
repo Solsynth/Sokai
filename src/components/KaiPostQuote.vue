@@ -1,5 +1,5 @@
 <template>
-  <div class="kai-post__quote">
+  <div ref="root" class="kai-post__quote">
     <p class="kai-post__quote-label">{{ t(labelKey, { name: quote.author.display }) }}</p>
 
     <p v-if="quote.title" class="kai-post__quote-title">{{ quote.title }}</p>
@@ -18,11 +18,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { bodyHtml, excerpt } from '~/src/content/markdown.js';
 import { type PostReference } from '~/src/api/models.js';
 import { t } from '~/src/kaios/l10n.js';
+import { cachePhotoSrcs } from '~/src/kaios/media-cache.js';
 
 const props = withDefaults(
   defineProps<{
@@ -41,4 +42,9 @@ const QUOTE_UNITS = 48;
 
 const text = computed(() => excerpt(props.quote, QUOTE_UNITS));
 const html = computed(() => bodyHtml(props.quote));
+
+const root = ref<HTMLElement | null>(null);
+// The quote's markdown images upgrade to their disk-cached URLs once ready,
+// the same pass the post body runs (`flush: 'post'` so the nodes exist).
+watch(html, () => cachePhotoSrcs(root.value), { flush: 'post' });
 </script>

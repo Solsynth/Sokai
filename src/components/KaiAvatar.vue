@@ -3,7 +3,7 @@
     v-if="src"
     class="kai-avatar"
     :class="sizeClass"
-    :src="src"
+    :src="cachedSrc"
     :alt="alt"
   />
   <!-- No picture: the name's initials in a circle, so a row that has one keeps
@@ -21,6 +21,7 @@
 import { computed } from 'vue';
 
 import { fileUrl } from '~/src/api/solian.js';
+import { useCachedUrl } from '~/src/kaios/media-cache.js';
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +37,9 @@ const props = withDefaults(
 );
 
 const src = computed(() => (props.file ? fileUrl(props.file) : ''));
+// The raw URL renders immediately; the cached `blob:` URL swaps in once the
+// bytes are on disk — every avatar in the app shares this one path.
+const cachedSrc = useCachedUrl(src);
 const sizeClass = computed(() => 'kai-avatar--' + props.size);
 const initials = computed(() => (props.file ? '' : avatarInitials(props.label)));
 

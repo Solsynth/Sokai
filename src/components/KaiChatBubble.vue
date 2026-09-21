@@ -42,7 +42,7 @@
     <img
       v-if="stickerSrc"
       class="kai-chat-bubble__sticker"
-      :src="stickerSrc"
+      :src="cachedSticker"
       :alt="message.content"
     />
     <p v-else-if="message.content" class="kai-chat-bubble__content">{{ message.content }}</p>
@@ -89,6 +89,7 @@ import KaiAttachmentList from '~/src/components/KaiAttachmentList.vue';
 import KaiAvatar from '~/src/components/KaiAvatar.vue';
 import KaiReactionChips from '~/src/components/KaiReactionChips.vue';
 import { t } from '~/src/kaios/l10n.js';
+import { useCachedUrl } from '~/src/kaios/media-cache.js';
 import { nav, registerSelectable, unregisterSelectable } from '~/src/kaios/nav.js';
 import { useChatStore } from '~/src/stores/chat.js';
 
@@ -197,6 +198,9 @@ const stickerSrc = computed(() => {
   const image = chat.stickerImageFor(placeholder.value);
   return image ? fileUrl(image) : '';
 });
+// Sticker thumbnails are the same drive thumbs as everything else: the raw URL
+// first, the cached `blob:` URL once the bytes are on disk.
+const cachedSticker = useCachedUrl(stickerSrc);
 
 watch(placeholder, (value) => {
   if (value) void chat.resolveStickerImage(value);

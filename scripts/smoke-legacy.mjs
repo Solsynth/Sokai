@@ -1843,8 +1843,8 @@ async function pressUntil(key, predicate, limit = 8) {
 
 /* --- Dashboard ------------------------------------------------------------ */
 
-/** The dashboard's own list rows: the calendar tile plus the five entries. */
-const DASHBOARD_ROWS = 6;
+/** The dashboard's own list rows: the calendar tile plus the six entries. */
+const DASHBOARD_ROWS = 7;
 /** The entry tiles alone — everything in the flat list but the calendar one. */
 const ENTRY_ROW = '.kai-list--flat .kai-list-item:not(.kai-next-event)';
 
@@ -1852,9 +1852,9 @@ check('the app opens on the dashboard', text('.kai-header__title') === 'app_titl
 check(
   'the dashboard lists the top-level screens',
   texts(ENTRY_ROW + ' .kai-list-item__primary').join('|') ===
-    'nav_explore|nav_chat|nav_notifications|nav_account|nav_about' &&
+    'nav_explore|nav_chat|nav_notifications|nav_account|nav_settings|nav_about' &&
     texts(ENTRY_ROW + ' .kai-list-item__secondary').join('|') ===
-      'nav_explore_desc|nav_chat_desc|nav_notifications_desc|nav_account_desc|nav_about_desc',
+      'nav_explore_desc|nav_chat_desc|nav_notifications_desc|nav_account_desc|nav_settings_desc|nav_about_desc',
   {
     primary: texts(ENTRY_ROW + ' .kai-list-item__primary'),
     secondary: texts(ENTRY_ROW + ' .kai-list-item__secondary'),
@@ -3306,7 +3306,8 @@ check(
   navState(all(ENTRY_ROW)),
 );
 
-// The second row is the new Chat screen; the fifth is About.
+// The second row is the new Chat screen; the sixth is About.
+await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
 await press('ArrowDown');
@@ -3319,6 +3320,48 @@ check('About opens from the dashboard', text('.kai-header__title') === 'nav_abou
 check('About shows the compiled version', about.includes('0.2.0'), about);
 check('About shows the compiled target', about.includes('KaiOS 2.5 (Gecko 48)'), about);
 
+// The fifth row is Settings — a screen of its own, sitting above About.
+await press('Backspace');
+await until(() => document.querySelectorAll('.kai-list-item').length === DASHBOARD_ROWS);
+await press('ArrowDown');
+await press('ArrowDown');
+await press('ArrowDown');
+await press('ArrowDown');
+await press('Enter');
+await until(() => text('.kai-header__title') === 'nav_settings');
+check(
+  'Settings opens from the dashboard with the media cache controls',
+  text('.kai-header__title') === 'nav_settings' &&
+    texts('.kai-list-item__primary').join('|') === 'settings_clear_media_cache' &&
+    // The host has no IndexedDB, so the cache reads empty — never an error.
+    (text('.kai-content > .kai-text') === 'settings_media_cache_empty' ||
+      text('.kai-content > .kai-text') === 'settings_cache_unavailable'),
+  {
+    title: text('.kai-header__title'),
+    rows: texts('.kai-list-item__primary'),
+    summary: text('.kai-content > .kai-text'),
+  },
+);
+// Clearing is destructive: the sheet asks once before any byte goes.
+await press('Enter');
+await until(() => Boolean(document.querySelector('.kai-option-menu')));
+check(
+  'clearing the media cache asks for confirmation',
+  text('.kai-option-menu__header') === 'settings_clear_media_cache_confirm' &&
+    texts('.kai-option-menu__item').join('|') === 'settings_clear_media_cache|action_cancel',
+  {
+    title: text('.kai-option-menu__header'),
+    options: texts('.kai-option-menu__item'),
+  },
+);
+// Back answers CANCEL: the sheet goes, the screen stays.
+await press('Backspace');
+await until(() => !document.querySelector('.kai-option-menu'));
+check(
+  'cancelling the clear leaves the cache alone',
+  text('.kai-header__title') === 'nav_settings' && !document.querySelector('.kai-option-menu'),
+  { title: text('.kai-header__title'), menu: Boolean(document.querySelector('.kai-option-menu')) },
+);
 await press('Backspace');
 await until(() => document.querySelectorAll('.kai-list-item').length === DASHBOARD_ROWS);
 

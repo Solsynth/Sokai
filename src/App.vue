@@ -42,6 +42,7 @@ import PostView from '~/src/views/PostView.vue';
 import PublisherView from '~/src/views/PublisherView.vue';
 import ReactionsView from '~/src/views/ReactionsView.vue';
 import SearchView from '~/src/views/SearchView.vue';
+import SettingsView from '~/src/views/SettingsView.vue';
 import StatusEditView from '~/src/views/StatusEditView.vue';
 
 const VIEWS: Record<string, Component> = {
@@ -64,6 +65,7 @@ const VIEWS: Record<string, Component> = {
   'chat-search': ChatSearchView,
   'chat-stickers': ChatStickersView,
   account: AccountView,
+  settings: SettingsView,
   'status-edit': StatusEditView,
   about: AboutView,
 };

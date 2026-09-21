@@ -82,6 +82,7 @@ const ENTRIES: DashboardEntry[] = [
   { view: 'chat', title: 'nav_chat', description: 'nav_chat_desc' },
   { view: 'notifications', title: 'nav_notifications', description: 'nav_notifications_desc' },
   { view: 'account', title: 'nav_account', description: 'nav_account_desc' },
+  { view: 'settings', title: 'nav_settings', description: 'nav_settings_desc' },
   { view: 'about', title: 'nav_about', description: 'nav_about_desc' },
 ];
 

@@ -27,7 +27,7 @@
           ref="image"
           class="kai-lightbox__media"
           :class="{ 'kai-lightbox__media--zoomed': zoom > 1 }"
-          :src="imageSrc"
+          :src="cachedImage"
           :style="imageStyle"
           :alt="current ? describeAttachment(current) : ''"
           @load="onImageLoad"
@@ -42,8 +42,8 @@
           <video
             ref="player"
             class="kai-lightbox__media"
-            :src="mediaSrc(current)"
-            :poster="current.src ? '' : thumbnailUrl(current.id)"
+            :src="cachedMedia"
+            :poster="cachedPoster"
             @timeupdate="syncProgress"
             @loadedmetadata="syncProgress"
             @pause="playing = false"
@@ -63,7 +63,7 @@
           <audio
             ref="player"
             class="kai-lightbox__audio"
-            :src="mediaSrc(current)"
+            :src="cachedMedia"
             @timeupdate="syncProgress"
             @loadedmetadata="syncProgress"
             @pause="playing = false"
@@ -105,6 +105,7 @@ import KaiPlayIcon from '~/src/components/KaiPlayIcon.vue';
 import { KEY } from '~/src/kaios/keys.js';
 import { placeholderDataUrl } from '~/src/kaios/blur.js';
 import { t } from '~/src/kaios/l10n.js';
+import { useCachedUrl } from '~/src/kaios/media-cache.js';
 import { nav, registerSelectable, setBaseSoftkeys, unregisterSelectable } from '~/src/kaios/nav.js';
 
 /**
@@ -164,6 +165,9 @@ const imageSrc = computed(() => {
   if (!item || item.kind !== 'image') return '';
   return originalShown.value ? originalUrl(item.id) : fileUrl(item.id);
 });
+// The raw URL renders first — the preview-original progression above never
+// blanks — and the cached `blob:` URL replaces it once the bytes are on disk.
+const cachedImage = useCachedUrl(imageSrc);
 
 /** The picture's BlurHash wash over the stage while its bytes are on the
  *  wire; nothing once the image is up (the media covers the stage) or the
@@ -183,6 +187,18 @@ const stageStyle = computed(() => {
 function mediaSrc(attachment: Attachment): string {
   return attachment.src || originalUrl(attachment.id);
 }
+const mediaSource = computed(() => (current.value ? mediaSrc(current.value) : ''));
+// Held while playing: a video or voice note that already started streaming
+// from the raw URL is not restarted by the cache swap.
+const cachedMedia = useCachedUrl(mediaSource, playing);
+
+/** The video's poster frame — the server's thumbnail, cached like any image. */
+const posterSrc = computed(() => {
+  const item = current.value;
+  if (!item || item.kind !== 'video' || item.src) return '';
+  return thumbnailUrl(item.id);
+});
+const cachedPoster = useCachedUrl(posterSrc);
 const isSelected = computed(() => uid.value !== 0 && nav.current === uid.value);
 
 /** How far one D-pad press pans a zoomed image — one design-guide row. */
